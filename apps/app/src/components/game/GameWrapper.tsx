@@ -39,8 +39,12 @@ export function GameWrapper() {
   }, [agentState?.lives]);
 
   // --- Send messages to agent ---
+  // Guard against "Thread already running" — if the agent is busy,
+  // skip the call. The engine's requestingChunks flag self-corrects
+  // on the next frame when the current run completes.
   const sendToAgent = useCallback(
     (message: string) => {
+      if (agent.isRunning) return;
       agent.addMessage({
         role: "user",
         id: crypto.randomUUID(),
