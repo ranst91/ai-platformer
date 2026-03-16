@@ -10,7 +10,6 @@ import {
   GROUND_Y,
   CHUNK_REQUEST_THRESHOLD,
   MIN_CHUNKS_AHEAD,
-  COLORS,
 } from "./constants";
 import { updatePlayer } from "./physics";
 import { checkEnemyCollision, checkCoinCollision, platformWorldX } from "./physics";
@@ -70,6 +69,8 @@ export class GameEngine {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
+    canvas.width = CANVAS_WIDTH;
+    canvas.height = CANVAS_HEIGHT;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Could not get 2D context");
     this.ctx = ctx;

@@ -182,12 +182,16 @@ export function drawEnemy(
   ctx: CanvasRenderingContext2D,
   enemy: Enemy,
   worldX: number,
-  camera: Camera
+  camera: Camera,
+  time: number = 0
 ): void {
   if (!enemy.alive) return;
 
   const screenX = worldX - camera.x;
-  const screenY = enemy.y;
+  // Flyers bob up and down
+  const screenY = enemy.type === "flyer"
+    ? enemy.y + Math.sin(time * 2 + worldX * 0.01) * 15
+    : enemy.y;
   const SIZE = 30;
 
   if (screenX + SIZE < 0 || screenX > CANVAS_WIDTH) return;
@@ -338,7 +342,7 @@ export function drawChunks(
     for (const enemy of chunk.enemies) {
       if (!enemy.alive) continue;
       const worldX = enemy.x + chunk.chunk_index * CHUNK_WIDTH + (enemy.moveOffset ?? 0);
-      drawEnemy(ctx, enemy, worldX, camera);
+      drawEnemy(ctx, enemy, worldX, camera, time);
     }
   }
 }
