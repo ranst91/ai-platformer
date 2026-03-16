@@ -43,8 +43,8 @@ export function updatePlayer(
   if (!player.alive) return { landed: false, fellOff: false };
 
   // ── Horizontal movement ──────────────────────────────────────────────────
-  const movingLeft = keys.has("ArrowLeft") || keys.has("a");
-  const movingRight = keys.has("ArrowRight") || keys.has("d");
+  const movingLeft = keys.has("ArrowLeft") || keys.has("a") || keys.has("A");
+  const movingRight = keys.has("ArrowRight") || keys.has("d") || keys.has("D");
 
   if (movingLeft) {
     player.vx = -PLAYER_SPEED;
@@ -58,7 +58,7 @@ export function updatePlayer(
 
   // ── Jump ─────────────────────────────────────────────────────────────────
   const wantsJump =
-    keys.has("ArrowUp") || keys.has("w") || keys.has(" ");
+    keys.has("ArrowUp") || keys.has("w") || keys.has("W") || keys.has(" ");
   if (wantsJump && player.onGround) {
     player.vy = PLAYER_JUMP_VELOCITY;
     player.onGround = false;

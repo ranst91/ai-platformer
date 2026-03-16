@@ -201,6 +201,7 @@ export class GameEngine {
   // ── Update ────────────────────────────────────────────────────────────────────
 
   private update(dt: number): void {
+    if (!this.state.player.alive) return;
     const { player, chunks } = this.state;
 
     // 1. Gather nearby platforms
