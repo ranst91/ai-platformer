@@ -17,43 +17,141 @@ import {
 // ─── Clear ───────────────────────────────────────────────────────────────────
 
 export function clearCanvas(ctx: CanvasRenderingContext2D): void {
-  ctx.fillStyle = COLORS.sky;
+  // Vertical gradient sky
+  const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+  grad.addColorStop(0, COLORS.skyTop);
+  grad.addColorStop(1, COLORS.skyBottom);
+  ctx.fillStyle = grad;
   ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 }
 
 // ─── Background ──────────────────────────────────────────────────────────────
 
-// Simple parallax clouds stored as offsets from the origin
+// Cloud definitions: ox = world-space origin x, oy = screen y, r = base radius
 const CLOUD_DEFS: Array<{ ox: number; oy: number; r: number }> = [
-  { ox: 80,  oy: 80,  r: 30 },
-  { ox: 200, oy: 50,  r: 20 },
-  { ox: 400, oy: 100, r: 35 },
-  { ox: 600, oy: 65,  r: 25 },
-  { ox: 750, oy: 90,  r: 28 },
-  { ox: 1100, oy: 70, r: 32 },
-  { ox: 1400, oy: 55, r: 22 },
+  { ox: 80,   oy: 70,  r: 32 },
+  { ox: 230,  oy: 45,  r: 22 },
+  { ox: 420,  oy: 90,  r: 38 },
+  { ox: 620,  oy: 60,  r: 28 },
+  { ox: 780,  oy: 85,  r: 30 },
+  { ox: 1100, oy: 65,  r: 35 },
+  { ox: 1350, oy: 50,  r: 24 },
 ];
 
-export function drawBackground(ctx: CanvasRenderingContext2D, camera: Camera): void {
-  ctx.fillStyle = "#FFFFFF";
-  ctx.globalAlpha = 0.7;
+/** Draw a fluffy cloud made of multiple overlapping circles */
+function drawCloud(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+  ctx.beginPath();
+  ctx.arc(cx,             cy,           r,         0, Math.PI * 2);
+  ctx.arc(cx + r * 0.9,  cy - r * 0.3, r * 0.72,  0, Math.PI * 2);
+  ctx.arc(cx - r * 0.9,  cy - r * 0.25,r * 0.62,  0, Math.PI * 2);
+  ctx.arc(cx + r * 0.45, cy - r * 0.6, r * 0.52,  0, Math.PI * 2);
+  ctx.arc(cx - r * 0.4,  cy - r * 0.55,r * 0.45,  0, Math.PI * 2);
+  ctx.fill();
+}
 
-  // Parallax factor 0.3 — clouds scroll slower than the world
-  const parallaxX = camera.x * 0.3;
+export function drawBackground(ctx: CanvasRenderingContext2D, camera: Camera): void {
+  const TILE = 1600; // world pixels before clouds repeat
+
+  // ── Far layer: distant blue-tinted mountains (parallax 0.1) ──────────────
+  const farParallax = camera.x * 0.1;
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = "#90B8D8";
+
+  // Draw several rounded mountain silhouettes tiling across the screen
+  const mountainDefs = [
+    { ox: 0,   w: 260, h: 110 },
+    { ox: 220, w: 200, h:  80 },
+    { ox: 400, w: 280, h: 130 },
+    { ox: 650, w: 220, h:  95 },
+    { ox: 860, w: 260, h: 120 },
+    { ox: 1100,w: 200, h:  85 },
+    { ox: 1300,w: 240, h: 110 },
+  ];
+
+  for (const m of mountainDefs) {
+    const tileOff = Math.floor((farParallax - m.ox + TILE) / TILE) * TILE;
+    const sx = m.ox + tileOff - farParallax;
+    if (sx + m.w < 0 || sx > CANVAS_WIDTH) continue;
+    const baseY = GROUND_Y - 20;
+    ctx.beginPath();
+    ctx.moveTo(sx, baseY);
+    ctx.quadraticCurveTo(sx + m.w * 0.5, baseY - m.h, sx + m.w, baseY);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // ── Mid layer: green rolling hills (parallax 0.3) ─────────────────────────
+  const midParallax = camera.x * 0.3;
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#5D9B4A";
+
+  const hillDefs = [
+    { ox: 50,  w: 320, h:  80 },
+    { ox: 350, w: 260, h:  60 },
+    { ox: 600, w: 300, h:  75 },
+    { ox: 900, w: 280, h:  65 },
+    { ox: 1180,w: 320, h:  80 },
+    { ox: 1450,w: 260, h:  60 },
+  ];
+
+  for (const hill of hillDefs) {
+    const tileOff = Math.floor((midParallax - hill.ox + TILE) / TILE) * TILE;
+    const sx = hill.ox + tileOff - midParallax;
+    if (sx + hill.w < 0 || sx > CANVAS_WIDTH) continue;
+    const baseY = GROUND_Y + 5;
+    ctx.beginPath();
+    ctx.moveTo(sx, baseY);
+    ctx.quadraticCurveTo(sx + hill.w * 0.5, baseY - hill.h, sx + hill.w, baseY);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Hill dark base
+  ctx.fillStyle = "#4A7A3A";
+  for (const hill of hillDefs) {
+    const tileOff = Math.floor((midParallax - hill.ox + TILE) / TILE) * TILE;
+    const sx = hill.ox + tileOff - midParallax;
+    if (sx + hill.w < 0 || sx > CANVAS_WIDTH) continue;
+    const baseY = GROUND_Y + 5;
+    ctx.fillRect(sx, baseY - 12, hill.w, 12);
+  }
+
+  // ── Near layer: bushes/shrubs (parallax 0.5) ──────────────────────────────
+  const nearParallax = camera.x * 0.5;
+  const bushDefs = [
+    { ox: 100, w: 55, h: 25, c: "#4CAF50" },
+    { ox: 280, w: 40, h: 20, c: "#388E3C" },
+    { ox: 470, w: 60, h: 28, c: "#4CAF50" },
+    { ox: 700, w: 45, h: 22, c: "#388E3C" },
+    { ox: 950, w: 55, h: 26, c: "#4CAF50" },
+    { ox: 1200,w: 50, h: 22, c: "#388E3C" },
+    { ox: 1430,w: 60, h: 28, c: "#4CAF50" },
+  ];
+
+  for (const bush of bushDefs) {
+    const tileOff = Math.floor((nearParallax - bush.ox + TILE) / TILE) * TILE;
+    const sx = bush.ox + tileOff - nearParallax;
+    if (sx + bush.w < 0 || sx > CANVAS_WIDTH) continue;
+    const baseY = GROUND_Y;
+    ctx.fillStyle = bush.c;
+    // Bush = two overlapping circles on a flat base
+    ctx.beginPath();
+    ctx.arc(sx + bush.w * 0.35, baseY - bush.h * 0.7, bush.h * 0.7, 0, Math.PI * 2);
+    ctx.arc(sx + bush.w * 0.7,  baseY - bush.h * 0.55, bush.h * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(sx, baseY - bush.h * 0.35, bush.w, bush.h * 0.35);
+  }
+
+  // ── Clouds (parallax 0.25) ────────────────────────────────────────────────
+  const cloudParallax = camera.x * 0.25;
+  ctx.fillStyle = "#FFFFFF";
+  ctx.globalAlpha = 0.82;
 
   for (const cloud of CLOUD_DEFS) {
-    // Tile clouds so they repeat every 1600 px of world space
-    const tileOffset = Math.floor((parallaxX - cloud.ox + 1600) / 1600) * 1600;
-    const screenX = cloud.ox + tileOffset - parallaxX;
-
-    if (screenX + cloud.r * 2 < 0 || screenX - cloud.r * 2 > CANVAS_WIDTH) continue;
-
-    // Draw a fluffy cloud from 3 overlapping circles
-    ctx.beginPath();
-    ctx.arc(screenX,        cloud.oy,           cloud.r,       0, Math.PI * 2);
-    ctx.arc(screenX + cloud.r * 0.8, cloud.oy - cloud.r * 0.4, cloud.r * 0.7, 0, Math.PI * 2);
-    ctx.arc(screenX - cloud.r * 0.8, cloud.oy - cloud.r * 0.3, cloud.r * 0.6, 0, Math.PI * 2);
-    ctx.fill();
+    const tileOff = Math.floor((cloudParallax - cloud.ox + TILE) / TILE) * TILE;
+    const screenX = cloud.ox + tileOff - cloudParallax;
+    if (screenX + cloud.r * 3 < 0 || screenX - cloud.r * 3 > CANVAS_WIDTH) continue;
+    drawCloud(ctx, screenX, cloud.oy, cloud.r);
   }
 
   ctx.globalAlpha = 1;
@@ -62,17 +160,77 @@ export function drawBackground(ctx: CanvasRenderingContext2D, camera: Camera): v
 // ─── Ground ───────────────────────────────────────────────────────────────────
 
 export function drawGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
-  // Main ground body
-  ctx.fillStyle = COLORS.ground;
-  ctx.fillRect(0, GROUND_Y, CANVAS_WIDTH, GROUND_HEIGHT);
+  const GRASS_HEIGHT = 10;
+  const HIGHLIGHT_HEIGHT = 3;
+  const DARK_LAYER = 16;
 
-  // Grass stripe on top
-  const GRASS_HEIGHT = 8;
+  // Dark earth base layer
+  ctx.fillStyle = COLORS.groundDark;
+  ctx.fillRect(0, GROUND_Y + GRASS_HEIGHT + DARK_LAYER, CANVAS_WIDTH, GROUND_HEIGHT - GRASS_HEIGHT - DARK_LAYER);
+
+  // Main earth body
+  ctx.fillStyle = COLORS.ground;
+  ctx.fillRect(0, GROUND_Y + GRASS_HEIGHT, CANVAS_WIDTH, DARK_LAYER);
+
+  // Subtle dirt pattern dots
+  ctx.fillStyle = "rgba(0,0,0,0.08)";
+  const dotSpacing = 28;
+  const dotOffX = Math.floor(camera.x * 0.95) % dotSpacing;
+  for (let dx = -dotSpacing + dotOffX; dx < CANVAS_WIDTH + dotSpacing; dx += dotSpacing) {
+    for (let dy = GROUND_Y + GRASS_HEIGHT + 6; dy < GROUND_Y + GROUND_HEIGHT - 6; dy += 18) {
+      ctx.beginPath();
+      ctx.arc(dx + (dy % 14), dy, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Grass top stripe
   ctx.fillStyle = COLORS.groundTop;
   ctx.fillRect(0, GROUND_Y, CANVAS_WIDTH, GRASS_HEIGHT);
+
+  // Grass highlight stripe
+  ctx.fillStyle = COLORS.groundGrassHighlight;
+  ctx.fillRect(0, GROUND_Y, CANVAS_WIDTH, HIGHLIGHT_HEIGHT);
+
+  // Grass blade details — tiny triangles at regular intervals
+  ctx.fillStyle = "#388E3C";
+  const bladeSpacing = 12;
+  const bladeOffX = Math.floor(camera.x % bladeSpacing);
+  for (let bx = -bladeSpacing + bladeOffX; bx < CANVAS_WIDTH + bladeSpacing; bx += bladeSpacing) {
+    ctx.beginPath();
+    ctx.moveTo(bx,      GROUND_Y);
+    ctx.lineTo(bx + 3,  GROUND_Y - 5);
+    ctx.lineTo(bx + 6,  GROUND_Y);
+    ctx.closePath();
+    ctx.fill();
+  }
 }
 
 // ─── Platform ────────────────────────────────────────────────────────────────
+
+/** Helper: draw a rounded rectangle (compatible with older browsers) */
+function fillRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+): void {
+  const rad = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.lineTo(x + w - rad, y);
+  ctx.arcTo(x + w, y, x + w, y + rad, rad);
+  ctx.lineTo(x + w, y + h - rad);
+  ctx.arcTo(x + w, y + h, x + w - rad, y + h, rad);
+  ctx.lineTo(x + rad, y + h);
+  ctx.arcTo(x, y + h, x, y + h - rad, rad);
+  ctx.lineTo(x, y + rad);
+  ctx.arcTo(x, y, x + rad, y, rad);
+  ctx.closePath();
+  ctx.fill();
+}
 
 export function drawPlatform(
   ctx: CanvasRenderingContext2D,
@@ -85,54 +243,189 @@ export function drawPlatform(
   if (screenX + platform.width < 0 || screenX > CANVAS_WIDTH) return;
 
   const { y, width, height, type } = platform;
+  const GRASS_H = 8;
+  const CORNER_R = 4;
+  const SHADOW_OFFSET = 3;
 
-  // Base body
-  ctx.fillStyle = COLORS.platform;
-  ctx.fillRect(screenX, y, width, height);
-
-  // Top stripe / type indicator
-  const TOP_H = 6;
+  // Drop shadow
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.beginPath();
+  fillRoundRect(ctx, screenX + SHADOW_OFFSET, y + SHADOW_OFFSET, width, height, CORNER_R);
 
   switch (type) {
-    case "bouncy":
-      // Pink top
-      ctx.fillStyle = "#FF69B4";
-      ctx.fillRect(screenX, y, width, TOP_H);
-      break;
+    case "bouncy": {
+      // Pink/magenta body
+      ctx.fillStyle = "#E91E8C";
+      fillRoundRect(ctx, screenX, y, width, height, CORNER_R);
 
-    case "icy":
-      // Light blue top
-      ctx.fillStyle = "#ADD8E6";
-      ctx.fillRect(screenX, y, width, TOP_H);
-      break;
+      // Darker bottom edge
+      ctx.fillStyle = "#AD1457";
+      fillRoundRect(ctx, screenX, y + height - 6, width, 6, CORNER_R);
 
-    case "crumbling":
-      // Brown with crack lines
-      ctx.fillStyle = "#8B6914";
-      ctx.fillRect(screenX, y, width, TOP_H);
-      // Crack lines
-      ctx.strokeStyle = "#5C4A1E";
-      ctx.lineWidth = 1.5;
-      const step = Math.max(20, Math.floor(width / 4));
-      for (let cx = screenX + step; cx < screenX + width - 4; cx += step) {
+      // Spring coil pattern on body
+      ctx.strokeStyle = "#F48FB1";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      const coilCount = Math.floor(width / 16);
+      for (let i = 0; i <= coilCount; i++) {
+        const cx = screenX + (i / coilCount) * width;
         ctx.beginPath();
-        ctx.moveTo(cx, y);
-        ctx.lineTo(cx - 4, y + height);
+        ctx.moveTo(cx, y + GRASS_H);
+        ctx.lineTo(cx, y + height - 4);
         ctx.stroke();
       }
-      break;
+      ctx.setLineDash([]);
 
-    case "moving":
-      // Green-yellow top
-      ctx.fillStyle = "#9ACD32";
-      ctx.fillRect(screenX, y, width, TOP_H);
+      // Spring visual on top
+      ctx.fillStyle = "#FCE4EC";
+      ctx.fillRect(screenX + width * 0.35, y - 4, width * 0.3, 5);
+      ctx.fillStyle = "#E91E8C";
+      ctx.fillRect(screenX + width * 0.4, y - 8, width * 0.2, 5);
       break;
+    }
 
-    default:
-      // Normal — classic green top
+    case "icy": {
+      // Light blue icy body
+      ctx.fillStyle = "#B3E5FC";
+      fillRoundRect(ctx, screenX, y, width, height, CORNER_R);
+
+      // Darker ice underside
+      ctx.fillStyle = "#81D4FA";
+      fillRoundRect(ctx, screenX, y + height - 5, width, 5, CORNER_R);
+
+      // Shiny highlights (diagonal stripes)
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = "#FFFFFF";
+      for (let ix = screenX + 6; ix < screenX + width - 4; ix += 18) {
+        ctx.beginPath();
+        ctx.moveTo(ix, y + 2);
+        ctx.lineTo(ix + 6, y + 2);
+        ctx.lineTo(ix + 2, y + height - 2);
+        ctx.lineTo(ix - 4, y + height - 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // Frost crystal clusters on top
+      ctx.fillStyle = "#E1F5FE";
+      ctx.fillRect(screenX + 2, y, width - 4, GRASS_H - 2);
+
+      // Little frost spikes
+      ctx.fillStyle = "#FFFFFF";
+      const crystalSpacing = 14;
+      for (let cx2 = screenX + 6; cx2 < screenX + width - 4; cx2 += crystalSpacing) {
+        ctx.beginPath();
+        ctx.moveTo(cx2, y);
+        ctx.lineTo(cx2 + 3, y - 5);
+        ctx.lineTo(cx2 + 6, y);
+        ctx.closePath();
+        ctx.fill();
+      }
+      break;
+    }
+
+    case "crumbling": {
+      // Cracked brown body
+      ctx.fillStyle = "#A1887F";
+      fillRoundRect(ctx, screenX, y, width, height, CORNER_R);
+
+      // Darker base
+      ctx.fillStyle = "#795548";
+      fillRoundRect(ctx, screenX, y + height - 5, width, 5, CORNER_R);
+
+      // Chunk/gap gaps — visible cracks
+      ctx.strokeStyle = "#4E342E";
+      ctx.lineWidth = 1.5;
+      const step = Math.max(20, Math.floor(width / 4));
+      for (let cx3 = screenX + step; cx3 < screenX + width - 4; cx3 += step) {
+        ctx.beginPath();
+        ctx.moveTo(cx3,     y + 2);
+        ctx.lineTo(cx3 - 3, y + height * 0.4);
+        ctx.lineTo(cx3 + 3, y + height * 0.6);
+        ctx.lineTo(cx3 - 2, y + height - 2);
+        ctx.stroke();
+        // Cross-crack
+        ctx.beginPath();
+        ctx.moveTo(cx3 - 8, y + height * 0.5);
+        ctx.lineTo(cx3 + 8, y + height * 0.55);
+        ctx.stroke();
+      }
+
+      // Dusty top layer
+      ctx.fillStyle = "#BCAAA4";
+      ctx.fillRect(screenX + 2, y, width - 4, GRASS_H - 2);
+      break;
+    }
+
+    case "moving": {
+      // Slightly different green — moving platform
+      ctx.fillStyle = COLORS.platform;
+      fillRoundRect(ctx, screenX, y, width, height, CORNER_R);
+
+      // Dark bottom edge
+      ctx.fillStyle = COLORS.platformDark;
+      fillRoundRect(ctx, screenX, y + height - 5, width, 5, CORNER_R);
+
+      // Green top
+      ctx.fillStyle = "#66BB6A";
+      ctx.fillRect(screenX + 2, y, width - 4, GRASS_H);
+
+      // Highlight
+      ctx.fillStyle = "#A5D6A7";
+      ctx.fillRect(screenX + 2, y, width - 4, 3);
+
+      // Arrow indicators on the body (subtle)
+      ctx.fillStyle = "rgba(255,255,255,0.25)";
+      const arrowCy = y + height * 0.62;
+      const arrowMidX = screenX + width * 0.5;
+      // Left arrow
+      ctx.beginPath();
+      ctx.moveTo(arrowMidX - 6,  arrowCy);
+      ctx.lineTo(arrowMidX - 12, arrowCy - 5);
+      ctx.lineTo(arrowMidX - 12, arrowCy + 5);
+      ctx.closePath();
+      ctx.fill();
+      // Right arrow
+      ctx.beginPath();
+      ctx.moveTo(arrowMidX + 6,  arrowCy);
+      ctx.lineTo(arrowMidX + 12, arrowCy - 5);
+      ctx.lineTo(arrowMidX + 12, arrowCy + 5);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+
+    default: {
+      // Normal — warm brown wood body
+      ctx.fillStyle = COLORS.platform;
+      fillRoundRect(ctx, screenX, y, width, height, CORNER_R);
+
+      // Darker bottom edge
+      ctx.fillStyle = COLORS.platformDark;
+      fillRoundRect(ctx, screenX, y + height - 5, width, 5, CORNER_R);
+
+      // Grass top — slightly overhanging for organic feel (+2 each side)
       ctx.fillStyle = COLORS.platformTop;
-      ctx.fillRect(screenX, y, width, TOP_H);
+      ctx.fillRect(screenX - 2, y, width + 4, GRASS_H);
+
+      // Grass highlight
+      ctx.fillStyle = COLORS.platformTopHighlight;
+      ctx.fillRect(screenX - 2, y, width + 4, 3);
+
+      // Grass blade details
+      ctx.fillStyle = "#388E3C";
+      const bSpacing = 10;
+      for (let bx = screenX; bx < screenX + width; bx += bSpacing) {
+        ctx.beginPath();
+        ctx.moveTo(bx,     y);
+        ctx.lineTo(bx + 2, y - 4);
+        ctx.lineTo(bx + 5, y);
+        ctx.closePath();
+        ctx.fill();
+      }
       break;
+    }
   }
 }
 
@@ -145,35 +438,121 @@ export function drawPlayer(
 ): void {
   const screenX = player.x - camera.x;
   const screenY = player.y;
+  const { facing, vy, onGround } = player;
 
-  // Body
+  const bodyX = screenX;
+  const bodyY = screenY;
+  const bodyW = PLAYER_WIDTH;
+  const bodyH = PLAYER_HEIGHT;
+
+  // Vertical squish when falling
+  const isFalling = vy > 50 && !onGround;
+  const isJumping = vy < -50;
+  const scaleY = isFalling ? 0.9 : 1;
+  const scaleX = isFalling ? 1.1 : 1;
+  const squishOffX = bodyW * (1 - scaleX) / 2;
+  const squishOffY = bodyH * (1 - scaleY);
+
+  // ── Body (red torso) ──────────────────────────────────────────────────────
+  const torsoX = bodyX + squishOffX;
+  const torsoY = bodyY + bodyH * 0.38 + squishOffY;
+  const torsoW = bodyW * scaleX;
+  const torsoH = bodyH * 0.62 * scaleY;
+
   ctx.fillStyle = COLORS.player;
-  ctx.fillRect(screenX, screenY, PLAYER_WIDTH, PLAYER_HEIGHT);
+  fillRoundRect(ctx, torsoX, torsoY, torsoW, torsoH, 4);
 
-  // Eye position depends on facing direction
-  // facing = 1 → right side, facing = -1 → left side
-  const eyeOffsetX = player.facing === 1 ? PLAYER_WIDTH * 0.6 : PLAYER_WIDTH * 0.2;
-  const eyeOffsetY = PLAYER_HEIGHT * 0.25;
-  const eyeR = 5;
+  // Torso shading (right side slightly darker)
+  const torsoGrad = ctx.createLinearGradient(torsoX, 0, torsoX + torsoW, 0);
+  torsoGrad.addColorStop(0, "rgba(255,255,255,0.1)");
+  torsoGrad.addColorStop(1, "rgba(0,0,0,0.12)");
+  ctx.fillStyle = torsoGrad;
+  fillRoundRect(ctx, torsoX, torsoY, torsoW, torsoH, 4);
 
-  // White of eye
+  // ── Head ──────────────────────────────────────────────────────────────────
+  const headCx = bodyX + bodyW / 2;
+  const headCy = bodyY + bodyH * 0.25;
+  const headR = bodyW * 0.52;
+
+  ctx.fillStyle = COLORS.playerSkin;
+  ctx.beginPath();
+  ctx.arc(headCx, headCy, headR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Head shading
+  const headGrad = ctx.createRadialGradient(headCx - 3, headCy - 3, 2, headCx, headCy, headR);
+  headGrad.addColorStop(0, "rgba(255,255,255,0.2)");
+  headGrad.addColorStop(1, "rgba(0,0,0,0.08)");
+  ctx.fillStyle = headGrad;
+  ctx.beginPath();
+  ctx.arc(headCx, headCy, headR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── Cap ───────────────────────────────────────────────────────────────────
+  ctx.fillStyle = COLORS.playerDark;
+  // Brim: flat rectangle over top of head
+  const brimY = headCy - headR * 0.2;
+  ctx.fillRect(headCx - headR * 1.15, brimY - 5, headR * 2.3, 5);
+  // Cap dome: arc
+  ctx.beginPath();
+  ctx.arc(headCx, headCy - headR * 0.1, headR * 0.95, Math.PI, 0);
+  ctx.fill();
+
+  // ── Eyes ──────────────────────────────────────────────────────────────────
+  const eyeX = facing === 1
+    ? headCx + headR * 0.25
+    : headCx - headR * 0.25;
+  const eyeY = headCy + headR * 0.08;
+  const eyeR = 4;
+
   ctx.fillStyle = COLORS.playerEyes;
   ctx.beginPath();
-  ctx.arc(screenX + eyeOffsetX, screenY + eyeOffsetY, eyeR, 0, Math.PI * 2);
+  ctx.arc(eyeX, eyeY, eyeR, 0, Math.PI * 2);
   ctx.fill();
 
-  // Pupil
-  const pupilOffsetX = player.facing === 1 ? 2 : -2;
+  const pupilX = eyeX + (facing === 1 ? 1.5 : -1.5);
   ctx.fillStyle = "#000000";
   ctx.beginPath();
-  ctx.arc(
-    screenX + eyeOffsetX + pupilOffsetX,
-    screenY + eyeOffsetY + 1,
-    2.5,
-    0,
-    Math.PI * 2
-  );
+  ctx.arc(pupilX, eyeY + 1, 2, 0, Math.PI * 2);
   ctx.fill();
+
+  // ── Arms ──────────────────────────────────────────────────────────────────
+  const armY = torsoY + torsoH * 0.15;
+  const armW = 5;
+  const armH = torsoH * 0.45;
+
+  if (isJumping) {
+    // Arms up
+    ctx.fillStyle = COLORS.playerSkin;
+    // Left arm (angled up)
+    ctx.save();
+    ctx.translate(torsoX - 2, armY);
+    ctx.rotate(-0.5);
+    fillRoundRect(ctx, -armW, -armH, armW, armH, 2);
+    ctx.restore();
+    // Right arm (angled up)
+    ctx.save();
+    ctx.translate(torsoX + torsoW + 2, armY);
+    ctx.rotate(0.5);
+    fillRoundRect(ctx, 0, -armH, armW, armH, 2);
+    ctx.restore();
+  } else {
+    // Arms at sides
+    ctx.fillStyle = COLORS.playerSkin;
+    fillRoundRect(ctx, torsoX - armW, armY, armW, armH, 2);
+    fillRoundRect(ctx, torsoX + torsoW, armY, armW, armH, 2);
+  }
+
+  // ── Feet ──────────────────────────────────────────────────────────────────
+  const footW = torsoW * 0.42;
+  const footH = 6;
+  const footY = torsoY + torsoH - 2;
+
+  ctx.fillStyle = "#4E342E"; // dark brown shoes
+  // Left foot
+  fillRoundRect(ctx, torsoX, footY, footW, footH, 2);
+  // Right foot
+  fillRoundRect(ctx, torsoX + torsoW - footW, footY, footW, footH, 2);
 }
 
 // ─── Enemy ───────────────────────────────────────────────────────────────────
@@ -188,7 +567,6 @@ export function drawEnemy(
   if (!enemy.alive) return;
 
   const screenX = worldX - camera.x;
-  // Flyers bob up and down
   const screenY = enemy.type === "flyer"
     ? enemy.y + Math.sin(time * 2 + worldX * 0.01) * 15
     : enemy.y;
@@ -196,80 +574,218 @@ export function drawEnemy(
 
   if (screenX + SIZE < 0 || screenX > CANVAS_WIDTH) return;
 
-  ctx.fillStyle = COLORS.enemy;
-
   switch (enemy.type) {
     case "walker": {
-      // Square body
-      ctx.fillRect(screenX, screenY, SIZE, SIZE);
+      const cx = screenX + SIZE / 2;
+      const cy = screenY + SIZE / 2;
 
-      // Angry eyes
-      const eyeY = screenY + SIZE * 0.25;
+      // Body — rounded purple "goomba"
+      ctx.fillStyle = COLORS.enemy;
+      ctx.beginPath();
+      ctx.arc(cx, cy, SIZE * 0.48, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Body shading
+      const bodyGrad = ctx.createRadialGradient(cx - 4, cy - 4, 2, cx, cy, SIZE * 0.48);
+      bodyGrad.addColorStop(0, "rgba(255,255,255,0.15)");
+      bodyGrad.addColorStop(1, "rgba(0,0,0,0.2)");
+      ctx.fillStyle = bodyGrad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, SIZE * 0.48, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Stubby feet (alternating based on time)
+      const footPhase = Math.sin(time * 6) > 0;
+      ctx.fillStyle = COLORS.enemyDark;
+      const footY = screenY + SIZE - 4;
+      const footH = 7;
+      const footW = 9;
+      // Left foot
+      ctx.fillStyle = COLORS.enemyDark;
+      fillRoundRect(
+        ctx,
+        screenX + 2,
+        footPhase ? footY - 3 : footY,
+        footW, footH, 2
+      );
+      // Right foot
+      fillRoundRect(
+        ctx,
+        screenX + SIZE - footW - 2,
+        footPhase ? footY : footY - 3,
+        footW, footH, 2
+      );
+
+      // Eyes — angry whites
+      const eyeY = screenY + SIZE * 0.28;
+      const eyeSpacingX = SIZE * 0.22;
       // Left eye
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(screenX + 4, eyeY, 8, 6);
+      ctx.fillStyle = COLORS.enemyEyes;
+      ctx.beginPath();
+      ctx.arc(cx - eyeSpacingX, eyeY, 5, 0, Math.PI * 2);
+      ctx.fill();
       ctx.fillStyle = "#000000";
-      ctx.fillRect(screenX + 7, eyeY + 1, 3, 4);
+      ctx.beginPath();
+      ctx.arc(cx - eyeSpacingX + 1, eyeY + 1, 2.5, 0, Math.PI * 2);
+      ctx.fill();
       // Right eye
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(screenX + SIZE - 12, eyeY, 8, 6);
+      ctx.fillStyle = COLORS.enemyEyes;
+      ctx.beginPath();
+      ctx.arc(cx + eyeSpacingX, eyeY, 5, 0, Math.PI * 2);
+      ctx.fill();
       ctx.fillStyle = "#000000";
-      ctx.fillRect(screenX + SIZE - 10, eyeY + 1, 3, 4);
+      ctx.beginPath();
+      ctx.arc(cx + eyeSpacingX - 1, eyeY + 1, 2.5, 0, Math.PI * 2);
+      ctx.fill();
 
-      // Angry brow
+      // Angry brows
       ctx.strokeStyle = "#000000";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(screenX + 4,        eyeY - 2);
-      ctx.lineTo(screenX + 12,       eyeY + 2);
+      ctx.moveTo(cx - eyeSpacingX - 5, eyeY - 6);
+      ctx.lineTo(cx - eyeSpacingX + 4, eyeY - 3);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(screenX + SIZE - 4, eyeY - 2);
-      ctx.lineTo(screenX + SIZE - 12, eyeY + 2);
+      ctx.moveTo(cx + eyeSpacingX + 5, eyeY - 6);
+      ctx.lineTo(cx + eyeSpacingX - 4, eyeY - 3);
       ctx.stroke();
       break;
     }
 
     case "flyer": {
-      // Triangle body
-      ctx.beginPath();
-      ctx.moveTo(screenX + SIZE / 2, screenY);
-      ctx.lineTo(screenX + SIZE,     screenY + SIZE);
-      ctx.lineTo(screenX,            screenY + SIZE);
-      ctx.closePath();
-      ctx.fill();
+      const cx = screenX + SIZE / 2;
+      const cy = screenY + SIZE / 2;
+      // Flapping wing phase (alternates up/down)
+      const wingUp = Math.sin(time * 8) > 0;
 
-      // Wings
-      ctx.fillStyle = "#FF8888";
+      // Wings (flap)
+      ctx.fillStyle = "#CE93D8"; // lighter purple wing
+      const wingSpan = SIZE * 0.9;
+      const wingH = SIZE * 0.55;
+      const wingTopY = wingUp ? cy - wingH : cy - wingH * 0.4;
+      const wingBotY = wingUp ? cy + wingH * 0.2 : cy + wingH * 0.7;
+
       // Left wing
       ctx.beginPath();
-      ctx.moveTo(screenX,            screenY + SIZE * 0.5);
-      ctx.lineTo(screenX - 12,       screenY + SIZE * 0.2);
-      ctx.lineTo(screenX - 12,       screenY + SIZE * 0.7);
+      ctx.moveTo(cx - 4, cy);
+      ctx.lineTo(cx - 4 - wingSpan, wingTopY);
+      ctx.lineTo(cx - 4 - wingSpan, wingBotY);
       ctx.closePath();
       ctx.fill();
       // Right wing
       ctx.beginPath();
-      ctx.moveTo(screenX + SIZE,     screenY + SIZE * 0.5);
-      ctx.lineTo(screenX + SIZE + 12, screenY + SIZE * 0.2);
-      ctx.lineTo(screenX + SIZE + 12, screenY + SIZE * 0.7);
+      ctx.moveTo(cx + 4, cy);
+      ctx.lineTo(cx + 4 + wingSpan, wingTopY);
+      ctx.lineTo(cx + 4 + wingSpan, wingBotY);
+      ctx.closePath();
+      ctx.fill();
+
+      // Wing vein lines
+      ctx.strokeStyle = COLORS.enemyDark;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx - 4, cy);
+      ctx.lineTo(cx - 4 - wingSpan * 0.7, wingTopY + (wingBotY - wingTopY) * 0.3);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx + 4, cy);
+      ctx.lineTo(cx + 4 + wingSpan * 0.7, wingTopY + (wingBotY - wingTopY) * 0.3);
+      ctx.stroke();
+
+      // Body (bat-like oval)
+      ctx.fillStyle = COLORS.enemy;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, SIZE * 0.32, SIZE * 0.44, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Body shading
+      const flyGrad = ctx.createRadialGradient(cx - 3, cy - 3, 2, cx, cy, SIZE * 0.44);
+      flyGrad.addColorStop(0, "rgba(255,255,255,0.18)");
+      flyGrad.addColorStop(1, "rgba(0,0,0,0.2)");
+      ctx.fillStyle = flyGrad;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, SIZE * 0.32, SIZE * 0.44, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eyes
+      ctx.fillStyle = COLORS.enemyEyes;
+      ctx.beginPath();
+      ctx.arc(cx - 5, cy - 4, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + 5, cy - 4, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#FF0000"; // red eyes for bat
+      ctx.beginPath();
+      ctx.arc(cx - 5, cy - 4, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + 5, cy - 4, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Tiny fangs
+      ctx.fillStyle = "#FFFFFF";
+      ctx.beginPath();
+      ctx.moveTo(cx - 4, cy + 6);
+      ctx.lineTo(cx - 2, cy + 11);
+      ctx.lineTo(cx,     cy + 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(cx,     cy + 6);
+      ctx.lineTo(cx + 2, cy + 11);
+      ctx.lineTo(cx + 4, cy + 6);
       ctx.closePath();
       ctx.fill();
       break;
     }
 
     case "shooter": {
-      // Turret base (rectangle)
-      ctx.fillRect(screenX + 4, screenY + SIZE * 0.4, SIZE - 8, SIZE * 0.6);
+      const cx = screenX + SIZE / 2;
 
-      // Turret head (circle)
+      // Base (dark metallic)
+      const baseGrad = ctx.createLinearGradient(screenX + 4, 0, screenX + SIZE - 4, 0);
+      baseGrad.addColorStop(0, "#546E7A");
+      baseGrad.addColorStop(0.5, "#78909C");
+      baseGrad.addColorStop(1, "#455A64");
+      ctx.fillStyle = baseGrad;
+      fillRoundRect(ctx, screenX + 4, screenY + SIZE * 0.45, SIZE - 8, SIZE * 0.55, 3);
+
+      // Turret head (metallic sphere)
+      const headGrad2 = ctx.createRadialGradient(cx - 3, screenY + SIZE * 0.35, 2, cx, screenY + SIZE * 0.4, SIZE * 0.36);
+      headGrad2.addColorStop(0, "#90A4AE");
+      headGrad2.addColorStop(1, "#37474F");
+      ctx.fillStyle = headGrad2;
       ctx.beginPath();
-      ctx.arc(screenX + SIZE / 2, screenY + SIZE * 0.4, SIZE * 0.35, 0, Math.PI * 2);
+      ctx.arc(cx, screenY + SIZE * 0.4, SIZE * 0.36, 0, Math.PI * 2);
       ctx.fill();
 
-      // Gun barrel (rect pointing left — shoots at player)
-      ctx.fillStyle = "#CC0000";
-      ctx.fillRect(screenX - 8, screenY + SIZE * 0.3, 14, 6);
+      // Cannon barrel
+      const barrelGrad = ctx.createLinearGradient(0, screenY + SIZE * 0.32, 0, screenY + SIZE * 0.48);
+      barrelGrad.addColorStop(0, "#546E7A");
+      barrelGrad.addColorStop(1, "#263238");
+      ctx.fillStyle = barrelGrad;
+      // Barrel extends left (toward player typically)
+      fillRoundRect(ctx, screenX - 10, screenY + SIZE * 0.32, 18, 7, 2);
+
+      // Barrel ring
+      ctx.fillStyle = "#37474F";
+      fillRoundRect(ctx, screenX + 2, screenY + SIZE * 0.31, 5, 9, 1);
+
+      // Warning light (blinking red)
+      const blinkOn = Math.sin(time * 5) > 0;
+      ctx.fillStyle = blinkOn ? "#F44336" : "#B71C1C";
+      ctx.beginPath();
+      ctx.arc(cx + SIZE * 0.2, screenY + SIZE * 0.3, 4, 0, Math.PI * 2);
+      ctx.fill();
+      if (blinkOn) {
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = "#F44336";
+        ctx.beginPath();
+        ctx.arc(cx + SIZE * 0.2, screenY + SIZE * 0.3, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
       break;
     }
   }
@@ -292,23 +808,71 @@ export function drawCoin(
   // Bobbing: ±4 px at ~1 Hz
   const bobY = coinY + Math.sin(time * 2 * Math.PI) * 4;
 
+  // 3D spin: vary apparent x-radius using cosine
+  const spinAngle = time * 3;
+  const xRadius = Math.abs(Math.cos(spinAngle)) * RADIUS;
+
+  // Glow effect behind coin
+  const glowSize = RADIUS * 2.2 + Math.sin(time * 4) * 2;
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = COLORS.coin;
+  ctx.beginPath();
+  ctx.arc(screenX, bobY, glowSize, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
   // Shadow
   ctx.fillStyle = "rgba(0,0,0,0.15)";
   ctx.beginPath();
   ctx.ellipse(screenX, bobY + RADIUS + 3, RADIUS * 0.7, 3, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Coin body
-  ctx.fillStyle = COLORS.coin;
+  // Coin body (spinning oval)
+  if (xRadius > 0.5) {
+    // Gradient changes with spin direction
+    const coinGrad = ctx.createLinearGradient(screenX - xRadius, 0, screenX + xRadius, 0);
+    const isFlipped = Math.cos(spinAngle) < 0;
+    if (isFlipped) {
+      coinGrad.addColorStop(0, COLORS.coinHighlight);
+      coinGrad.addColorStop(0.5, COLORS.coin);
+      coinGrad.addColorStop(1, COLORS.coinOutline);
+    } else {
+      coinGrad.addColorStop(0, COLORS.coinOutline);
+      coinGrad.addColorStop(0.5, COLORS.coin);
+      coinGrad.addColorStop(1, COLORS.coinHighlight);
+    }
+    ctx.fillStyle = coinGrad;
+  } else {
+    ctx.fillStyle = COLORS.coinHighlight;
+  }
   ctx.beginPath();
-  ctx.arc(screenX, bobY, RADIUS, 0, Math.PI * 2);
+  ctx.ellipse(screenX, bobY, xRadius, RADIUS, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Shine highlight
-  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  // Outline ring
+  ctx.strokeStyle = COLORS.coinOutline;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(screenX - 3, bobY - 3, RADIUS * 0.4, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.ellipse(screenX, bobY, xRadius, RADIUS, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Star sparkle particles (4 tiny stars around the coin)
+  if (xRadius > RADIUS * 0.6) {
+    ctx.fillStyle = "#FFE082";
+    const sparkAngles = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5];
+    const sparkDist = RADIUS * 1.7 + Math.sin(time * 5) * 2;
+    for (const sa of sparkAngles) {
+      const rotSa = sa + time * 2;
+      const spx = screenX + Math.cos(rotSa) * sparkDist;
+      const spy = bobY + Math.sin(rotSa) * sparkDist * 0.6;
+      const ss = 2 + Math.sin(time * 4 + sa) * 1;
+      ctx.globalAlpha = 0.7 + Math.sin(time * 4 + sa) * 0.3;
+      ctx.beginPath();
+      ctx.arc(spx, spy, ss, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
 }
 
 // ─── Chunks ───────────────────────────────────────────────────────────────────

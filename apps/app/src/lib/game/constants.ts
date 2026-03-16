@@ -25,16 +25,41 @@ export const CAMERA_SMOOTHING = 0.08;
 export const CHUNK_REQUEST_THRESHOLD = CHUNK_WIDTH * 2; // Request when within 2 chunks of end
 export const MIN_CHUNKS_AHEAD = 2; // Don't request if already this many chunks ahead of player
 
-// Colors (placeholder — will be polished later)
+// Colors — Mario-inspired palette
 export const COLORS = {
-  sky: "#87CEEB",
-  ground: "#8B4513",
-  groundTop: "#228B22",
-  platform: "#8B4513",
-  platformTop: "#228B22",
-  player: "#FF6347",
+  // Sky gradient
+  sky: "#4EC5F1",
+  skyTop: "#4EC5F1",
+  skyBottom: "#B5E8FB",
+
+  // Ground
+  ground: "#7B5B3A",
+  groundDark: "#5C3D1E",
+  groundTop: "#4CAF50",
+  groundGrassHighlight: "#66BB6A",
+
+  // Platforms
+  platform: "#8D6E40",
+  platformDark: "#6B5030",
+  platformTop: "#4CAF50",
+  platformTopHighlight: "#66BB6A",
+
+  // Player (Mario-red)
+  player: "#E53935",
+  playerDark: "#B71C1C",
+  playerSkin: "#FFCCBC",
   playerEyes: "#FFFFFF",
-  coin: "#FFD700",
-  enemy: "#FF4444",
-  heart: "#FF0000",
+
+  // Coin
+  coin: "#FFC107",
+  coinHighlight: "#FFE082",
+  coinOutline: "#FF8F00",
+
+  // Enemy
+  enemy: "#9C27B0",
+  enemyDark: "#6A1B9A",
+  enemyEyes: "#FFFFFF",
+
+  // UI
+  heart: "#E53935",
 };

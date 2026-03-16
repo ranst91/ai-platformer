@@ -403,69 +403,189 @@ export class GameEngine {
   // ── Overlay helpers ───────────────────────────────────────────────────────────
 
   private drawMenuOverlay(): void {
-    const { ctx } = this;
+    const { ctx, time } = this;
     const cx = CANVAS_WIDTH / 2;
+    const cy = CANVAS_HEIGHT / 2;
 
-    // Semi-transparent dark vignette
-    ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+    // Gradient dark overlay
+    const overlayGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+    overlayGrad.addColorStop(0, "rgba(0, 0, 60, 0.55)");
+    overlayGrad.addColorStop(1, "rgba(0, 0, 0, 0.7)");
+    ctx.fillStyle = overlayGrad;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Title
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#FFD700";
-    ctx.font = "bold 56px sans-serif";
-    ctx.fillText("INFINITE RUNNER", cx, CANVAS_HEIGHT / 2 - 40);
+    // Floating decoration coins
+    ctx.save();
+    const floatCoins = [
+      { ox: -160, oy: -90 },
+      { ox:  160, oy: -90 },
+      { ox: -220, oy:  20 },
+      { ox:  220, oy:  20 },
+    ];
+    for (const fc of floatCoins) {
+      const fcx = cx + fc.ox;
+      const fcy = cy + fc.oy + Math.sin(time * 2 + fc.ox) * 6;
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = "#FFC107";
+      ctx.beginPath();
+      ctx.arc(fcx, fcy, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#FFE082";
+      ctx.beginPath();
+      ctx.arc(fcx - 3, fcy - 3, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
 
-    // Subtitle
+    // Title — drop shadow + outline
+    ctx.textAlign = "center";
+    ctx.font = "bold 58px sans-serif";
+
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillText("INFINITE RUNNER", cx + 4, cy - 42 + 4);
+
+    // Outline
+    ctx.strokeStyle = "#B8860B";
+    ctx.lineWidth = 4;
+    ctx.strokeText("INFINITE RUNNER", cx, cy - 42);
+
+    // Fill
+    ctx.fillStyle = "#FFD700";
+    ctx.fillText("INFINITE RUNNER", cx, cy - 42);
+
+    // Subtitle with pulsing opacity
+    const pulse = 0.6 + Math.sin(time * 3) * 0.4;
+    ctx.globalAlpha = pulse;
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "24px sans-serif";
-    ctx.fillText("Press START", cx, CANVAS_HEIGHT / 2 + 20);
+    ctx.font = "26px sans-serif";
+    ctx.fillText("Press START to play", cx, cy + 20);
+    ctx.globalAlpha = 1;
+
+    // Decorative star row
+    ctx.fillStyle = "#FFD700";
+    ctx.font = "18px sans-serif";
+    ctx.fillText("★  ★  ★  ★  ★", cx, cy + 56);
 
     ctx.textAlign = "left";
   }
 
   private drawDeadOverlay(): void {
-    const { ctx } = this;
+    const { ctx, time } = this;
     const cx = CANVAS_WIDTH / 2;
+    const cy = CANVAS_HEIGHT / 2;
 
-    // Red tint
-    ctx.fillStyle = "rgba(200, 0, 0, 0.35)";
+    // Radial red vignette (darker at edges)
+    const radGrad = ctx.createRadialGradient(cx, cy, 60, cx, cy, CANVAS_WIDTH * 0.75);
+    radGrad.addColorStop(0, "rgba(180, 0, 0, 0.0)");
+    radGrad.addColorStop(0.5, "rgba(180, 0, 0, 0.3)");
+    radGrad.addColorStop(1, "rgba(120, 0, 0, 0.72)");
+    ctx.fillStyle = radGrad;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+    // "YOU DIED" — pulsing with heavy drop shadow
+    const pulse = 0.85 + Math.sin(time * 4) * 0.15;
+    const fontSize = Math.round(64 * pulse);
     ctx.textAlign = "center";
-    ctx.fillStyle = "#FF3333";
-    ctx.font = "bold 64px sans-serif";
-    ctx.fillText("YOU DIED", cx, CANVAS_HEIGHT / 2 - 10);
+    ctx.font = `bold ${fontSize}px sans-serif`;
 
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
+    ctx.fillText("YOU DIED", cx + 5, cy - 8 + 5);
+
+    // Outline
+    ctx.strokeStyle = "#7F0000";
+    ctx.lineWidth = 5;
+    ctx.strokeText("YOU DIED", cx, cy - 8);
+
+    // Fill
+    ctx.fillStyle = "#FF3333";
+    ctx.fillText("YOU DIED", cx, cy - 8);
+
+    // Respawning text
+    const subPulse = 0.5 + Math.sin(time * 2.5) * 0.5;
+    ctx.globalAlpha = subPulse;
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "22px sans-serif";
-    ctx.fillText("Respawning…", cx, CANVAS_HEIGHT / 2 + 40);
+    ctx.fillText("Respawning…", cx, cy + 44);
+    ctx.globalAlpha = 1;
 
     ctx.textAlign = "left";
   }
 
   private drawGameOverOverlay(score: number, coins: number, deaths: number): void {
-    const { ctx } = this;
+    const { ctx, time } = this;
     const cx = CANVAS_WIDTH / 2;
+    const cy = CANVAS_HEIGHT / 2;
 
-    // Dark overlay
-    ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
+    // Dark gradient overlay
+    const overlayGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+    overlayGrad.addColorStop(0, "rgba(20, 0, 0, 0.85)");
+    overlayGrad.addColorStop(1, "rgba(0, 0, 0, 0.92)");
+    ctx.fillStyle = overlayGrad;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.textAlign = "center";
 
-    ctx.fillStyle = "#FF4444";
+    // "GAME OVER" with glow
     ctx.font = "bold 72px sans-serif";
-    ctx.fillText("GAME OVER", cx, CANVAS_HEIGHT / 2 - 70);
 
+    // Glow layers
+    ctx.globalAlpha = 0.2 + Math.sin(time * 2) * 0.08;
+    ctx.fillStyle = "#FF4444";
+    for (const blur of [18, 12, 6]) {
+      ctx.save();
+      ctx.filter = `blur(${blur}px)`;
+      ctx.fillText("GAME OVER", cx, cy - 80);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    ctx.filter = "none";
+
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillText("GAME OVER", cx + 4, cy - 80 + 4);
+
+    // Outline
+    ctx.strokeStyle = "#7F0000";
+    ctx.lineWidth = 5;
+    ctx.strokeText("GAME OVER", cx, cy - 80);
+
+    // Fill
+    ctx.fillStyle = "#FF4444";
+    ctx.fillText("GAME OVER", cx, cy - 80);
+
+    // Stats panel background
+    const panelW = 320;
+    const panelH = 110;
+    const panelX = cx - panelW / 2;
+    const panelY = cy - 30;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+    ctx.strokeStyle = "rgba(255, 68, 68, 0.5)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(panelX, panelY, panelW, panelH, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    // Stats
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "28px sans-serif";
-    ctx.fillText(`Score: ${score}`, cx, CANVAS_HEIGHT / 2);
-    ctx.fillText(`Coins: ${coins}   Deaths: ${deaths}`, cx, CANVAS_HEIGHT / 2 + 44);
+    ctx.font = "bold 26px sans-serif";
+    ctx.fillText(`Score: ${score}`, cx, panelY + 36);
+    ctx.font = "22px sans-serif";
+    ctx.fillStyle = "#FFD700";
+    ctx.fillText(`Coins: ${coins}`, cx - 60, panelY + 72);
+    ctx.fillStyle = "#FF8A80";
+    ctx.fillText(`Deaths: ${deaths}`, cx + 60, panelY + 72);
 
+    // "Press START to play again" with pulsing animation
+    const pulse = 0.55 + Math.sin(time * 3) * 0.45;
+    ctx.globalAlpha = pulse;
     ctx.fillStyle = "#FFD700";
     ctx.font = "20px sans-serif";
-    ctx.fillText("Talk to the AI to play again", cx, CANVAS_HEIGHT / 2 + 96);
+    ctx.fillText("Talk to the AI to play again", cx, cy + 108);
+    ctx.globalAlpha = 1;
 
     ctx.textAlign = "left";
   }
