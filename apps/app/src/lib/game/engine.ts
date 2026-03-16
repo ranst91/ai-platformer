@@ -10,6 +10,7 @@ import {
   GROUND_Y,
   CHUNK_REQUEST_THRESHOLD,
   MIN_CHUNKS_AHEAD,
+  CHUNK_CLEANUP_BEHIND,
 } from "./constants";
 import { updatePlayer } from "./physics";
 import { checkEnemyCollision, checkCoinCollision, platformWorldX } from "./physics";
@@ -290,6 +291,30 @@ export class GameEngine {
       }
     }
 
+    // 7b. Mystery block hit detection — player hits from below (head bonk)
+    if (player.vy < 0) {
+      for (const chunk of chunks) {
+        for (const platform of chunk.platforms) {
+          if (platform.type !== "mystery" || platform.hit) continue;
+          const wx = platformWorldX(platform, chunk.chunk_index);
+          const playerTop = player.y;
+          const platBottom = platform.y + platform.height;
+          // Player's head is rising into the bottom of the platform
+          if (
+            playerTop <= platBottom &&
+            playerTop >= platBottom - 12 &&
+            player.x + PLAYER_WIDTH > wx &&
+            player.x < wx + platform.width
+          ) {
+            platform.hit = true;
+            player.vy = 50; // Stop upward movement (bonk)
+            // Spawn 3 coins above the block
+            this.state.coins += 3;
+          }
+        }
+      }
+    }
+
     // 8. Score update
     const distanceScore = Math.floor(Math.max(player.x - 100, 0) / 10);
     const newScore = distanceScore + this.state.coins * 50;
@@ -307,6 +332,13 @@ export class GameEngine {
 
     // 10. Chunk generation check
     this.checkChunkGeneration();
+
+    // 11. Prune very old chunks far behind the player (keeps memory bounded,
+    //     but with a generous buffer so removal is never visible)
+    const playerChunkIdx = Math.floor(player.x / CHUNK_WIDTH);
+    this.state.chunks = this.state.chunks.filter(
+      (c) => c.chunk_index >= playerChunkIdx - CHUNK_CLEANUP_BEHIND
+    );
   }
 
   // ── Player death ──────────────────────────────────────────────────────────────

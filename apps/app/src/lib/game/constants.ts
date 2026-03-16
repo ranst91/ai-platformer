@@ -21,9 +21,12 @@ export const GROUND_HEIGHT = 80;
 export const CAMERA_LEAD = CANVAS_WIDTH * 0.35; // Player positioned at 35% from left
 export const CAMERA_SMOOTHING = 0.08;
 
-// Chunk generation
-export const CHUNK_REQUEST_THRESHOLD = CHUNK_WIDTH * 2; // Request when within 2 chunks of end
-export const MIN_CHUNKS_AHEAD = 2; // Don't request if already this many chunks ahead of player
+// Chunk generation — generate far ahead so player never sees empty terrain
+export const CHUNK_REQUEST_THRESHOLD = CHUNK_WIDTH * 5; // Request when within 5 chunks of end
+export const MIN_CHUNKS_AHEAD = 5; // Always keep 5+ chunks ahead of player
+export const CHUNKS_PER_REQUEST = 3; // Request 3 chunks per batch
+export const INITIAL_CHUNKS = 6; // Start with 6 chunks
+export const CHUNK_CLEANUP_BEHIND = 8; // Only prune chunks 8+ behind player (very generous)
 
 // Colors — Mario-inspired palette
 export const COLORS = {

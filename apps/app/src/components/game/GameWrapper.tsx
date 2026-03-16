@@ -59,8 +59,10 @@ export function GameWrapper() {
   const startGame = useCallback(() => {
     setGamePhase("loading");
     sendToAgent(
-      "Start a new game! Use reset_game to generate 4 level chunks (chunk_index 0, 1, 2, 3). " +
-      "Set difficulty to 0.3 (easy start). Set lives to 3. " +
+      "Start a new game! Use reset_game to generate 6 level chunks (chunk_index 0 through 5). " +
+      "Set difficulty to 0.4 (include some enemies from the start!). Set lives to 3. " +
+      "IMPORTANT: Include at least 1-2 enemies per chunk (walkers on platforms) and " +
+      "2-3 mystery blocks (type='mystery', small width ~50-60px, height 30px) placed above the main path. " +
       "Welcome the player with a fun dm_message. " +
       "Include 3-4 suggestion buttons for the player."
     );
@@ -76,10 +78,11 @@ export function GameWrapper() {
       const nextIndex = maxIndex + 1;
 
       sendToAgent(
-        `Player reached x=${Math.round(playerX)}. Use append_chunks to generate 2 more chunks ` +
-        `(chunk_index ${nextIndex} and ${nextIndex + 1}). ` +
-        `Current difficulty: ${agentState?.difficulty || 0.3}. Player deaths: ${agentState?.deaths || 0}. ` +
-        `Adjust difficulty slightly based on performance. Update suggestions.`
+        `Player reached x=${Math.round(playerX)}. Use append_chunks to generate 3 more chunks ` +
+        `(chunk_index ${nextIndex}, ${nextIndex + 1}, and ${nextIndex + 2}). ` +
+        `Current difficulty: ${agentState?.difficulty || 0.4}. Player deaths: ${agentState?.deaths || 0}. ` +
+        `IMPORTANT: Include 1-2 enemies per chunk, 2-3 mystery blocks (type='mystery', width 50-60, height 30), ` +
+        `and 4-5 coins per chunk. Make it fun! Update suggestions.`
       );
     },
     [agentState, sendToAgent],

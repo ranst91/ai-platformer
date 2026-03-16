@@ -5,11 +5,12 @@ export interface Platform {
   y: number;
   width: number;
   height: number;
-  type: "normal" | "moving" | "crumbling" | "bouncy" | "icy";
+  type: "normal" | "moving" | "crumbling" | "bouncy" | "icy" | "mystery";
   // Runtime state (not from agent)
   crumbleTimer?: number;
   moveOffset?: number;
   moveDirection?: number;
+  hit?: boolean; // mystery blocks: true after player hits from below
 }
 
 export interface Enemy {

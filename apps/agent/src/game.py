@@ -12,7 +12,7 @@ class Platform(TypedDict):
     y: float
     width: float
     height: float
-    type: Literal["normal", "moving", "crumbling", "bouncy", "icy"]
+    type: Literal["normal", "moving", "crumbling", "bouncy", "icy", "mystery"]
 
 
 class Enemy(TypedDict):

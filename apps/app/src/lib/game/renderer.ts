@@ -396,6 +396,51 @@ export function drawPlatform(
       break;
     }
 
+    case "mystery": {
+      // Mario-style ? block
+      const isHit = platform.hit;
+
+      // Block body
+      ctx.fillStyle = isHit ? "#8D6E63" : "#FFC107";
+      fillRoundRect(ctx, screenX, y, width, height, CORNER_R);
+
+      // Darker bottom edge
+      ctx.fillStyle = isHit ? "#6D4C41" : "#FF8F00";
+      fillRoundRect(ctx, screenX, y + height - 5, width, 5, CORNER_R);
+
+      // Highlight top edge
+      ctx.fillStyle = isHit ? "#A1887F" : "#FFE082";
+      ctx.fillRect(screenX + 2, y + 1, width - 4, 3);
+
+      // Border/outline
+      ctx.strokeStyle = isHit ? "#5D4037" : "#E65100";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.rect(screenX + 1, y + 1, width - 2, height - 2);
+      ctx.stroke();
+
+      if (!isHit) {
+        // Question mark
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = `bold ${Math.min(height - 8, 20)}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("?", screenX + width / 2, y + height / 2);
+        // Question mark shadow
+        ctx.fillStyle = "#E65100";
+        ctx.fillText("?", screenX + width / 2 + 1, y + height / 2 + 1);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillText("?", screenX + width / 2, y + height / 2);
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+
+        // Subtle shine
+        ctx.fillStyle = "rgba(255,255,255,0.3)";
+        ctx.fillRect(screenX + 3, y + 3, width * 0.3, height * 0.3);
+      }
+      break;
+    }
+
     default: {
       // Normal — warm brown wood body
       ctx.fillStyle = COLORS.platform;
