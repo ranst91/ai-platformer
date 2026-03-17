@@ -83,22 +83,35 @@ function drawBackgroundSprites(
   camera: Camera,
   sprites: SpriteAtlas
 ): void {
+  // NOTE: clearCanvas() already draws the gradient sky, so we do NOT
+  // draw a solid sky tile here — that was causing a color mismatch (blue stripe).
+
   const T = 256; // Kenney background tiles are 256x256
 
-  // Layer 1: Solid sky — fill entire canvas as flat base (no parallax needed)
-  ctx.drawImage(sprites.bgSolidSky, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-  // Layer 2 (parallax 0.2): Hills — bottom-aligned to ground
-  const hillH = T;
-  const hillY = GROUND_Y - hillH + 30;
-  tileParallaxRow(ctx, sprites.bgHills, camera.x * 0.2, hillY, T, hillH);
-
-  // Layer 3 (parallax 0.4): Clouds — drawn on top of sky, upper portion only
-  // Only draw in the top 256px; the cloud sprite has transparency at top
-  // and white clouds at bottom, so it layers nicely over the sky
-  ctx.globalAlpha = 0.85;
-  tileParallaxRow(ctx, sprites.bgClouds, camera.x * 0.4, -20, T, T);
+  // Layer 1 (parallax 0.15): Clouds in the upper sky area
+  // The cloud sprite has light blue at top and white clouds at bottom.
+  // Draw it in the upper portion only, clipped so the bottom edge
+  // doesn't create a visible seam.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, CANVAS_WIDTH, 220); // clip to upper sky
+  ctx.clip();
+  ctx.globalAlpha = 0.9;
+  tileParallaxRow(ctx, sprites.bgClouds, camera.x * 0.15, -40, T, T);
   ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // Layer 2 (parallax 0.25): Hills in the mid-ground
+  // Draw the hills HIGH enough that their wavy green bottom does NOT
+  // touch the ground tiles (which scroll at 1:1). This prevents the
+  // "wavy attachment" visual glitch.
+  const hillY = GROUND_Y - T * 0.65; // top of hills ~185px above ground
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, CANVAS_WIDTH, GROUND_Y); // clip above ground line
+  ctx.clip();
+  tileParallaxRow(ctx, sprites.bgHills, camera.x * 0.25, hillY, T, T);
+  ctx.restore();
 }
 
 function drawBackgroundProcedural(ctx: CanvasRenderingContext2D, camera: Camera): void {
