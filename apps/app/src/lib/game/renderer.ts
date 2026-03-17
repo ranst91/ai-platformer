@@ -325,7 +325,9 @@ function fillRoundRect(
   ctx.fill();
 }
 
-/** Tile a sprite horizontally across a range, clipping to [startX, endX] */
+/** Tile a sprite horizontally across a range, clipping to [startX, endX].
+ *  Tiles are anchored to startX (not a global grid) so the pattern
+ *  stays fixed relative to the platform, not the camera. */
 function tileImageH(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
@@ -335,14 +337,16 @@ function tileImageH(
   tileW: number,
   tileH: number
 ): void {
+  const sx = Math.round(startX);
+  const sy = Math.round(y);
+  const ex = Math.round(endX);
   ctx.save();
   ctx.beginPath();
-  ctx.rect(Math.floor(startX), Math.floor(y), Math.ceil(endX - startX), Math.ceil(tileH));
+  ctx.rect(sx, sy, ex - sx, Math.ceil(tileH));
   ctx.clip();
-  const firstTileX = Math.floor(startX / tileW) * tileW;
-  for (let tx = firstTileX; tx < endX; tx += tileW) {
-    // +1 overlap prevents sub-pixel seams between adjacent tiles
-    ctx.drawImage(img, Math.floor(tx), Math.floor(y), tileW + 1, tileH + 1);
+  // Anchor tiles to startX — march forward from the platform's left edge
+  for (let tx = sx; tx < ex; tx += tileW) {
+    ctx.drawImage(img, tx, sy, tileW + 1, Math.ceil(tileH) + 1);
   }
   ctx.restore();
 }
@@ -371,32 +375,37 @@ function drawPlatformSprites(
   screenX: number,
   sprites: SpriteAtlas
 ): void {
-  const { y, width, height, type } = platform;
+  // Round ALL coordinates to integers to prevent sub-pixel seams
+  const x = Math.round(screenX);
+  const iy = Math.round(platform.y);
+  const w = Math.round(platform.width);
+  const h = Math.round(platform.height);
+  const { type } = platform;
   const TILE = 64;
 
   switch (type) {
     case "normal":
     case "moving": {
       // Grass cloud tiles: left + middle (tiled) + right
-      if (width <= TILE) {
-        // Narrow platform: stretch a single middle tile
-        ctx.drawImage(sprites.grassCloudMiddle, screenX, y, width, height);
+      if (w <= TILE) {
+        ctx.drawImage(sprites.grassCloudMiddle, x, iy, w, h);
       } else {
-        const leftW = Math.min(TILE, Math.floor(width / 3));
-        const rightW = Math.min(TILE, Math.floor(width / 3));
-        const midW = width - leftW - rightW;
-        const midStartX = screenX + leftW;
+        const leftW = Math.min(TILE, Math.floor(w / 3));
+        const rightW = Math.min(TILE, Math.floor(w / 3));
+        const midW = w - leftW - rightW;
+        const midStartX = x + leftW;
 
-        ctx.drawImage(sprites.grassCloudLeft,   screenX,           y, leftW,  height);
-        tileImageH(ctx, sprites.grassCloudMiddle, midStartX, y, midStartX + midW, TILE, height);
-        ctx.drawImage(sprites.grassCloudRight,  screenX + width - rightW, y, rightW, height);
+        // +1 overlap between cap and middle to prevent gap
+        ctx.drawImage(sprites.grassCloudLeft, x, iy, leftW + 1, h);
+        tileImageH(ctx, sprites.grassCloudMiddle, midStartX, iy, midStartX + midW, TILE, h);
+        ctx.drawImage(sprites.grassCloudRight, x + w - rightW, iy, rightW, h);
       }
 
       // Moving indicator: subtle blue tint overlay
       if (type === "moving") {
         ctx.globalAlpha = 0.18;
         ctx.fillStyle = "#4FC3F7";
-        ctx.fillRect(screenX, y, width, height);
+        ctx.fillRect(x, iy, w, h);
         ctx.globalAlpha = 1;
       }
       break;
@@ -405,61 +414,42 @@ function drawPlatformSprites(
     case "mystery": {
       const isHit = platform.hit === true;
       const blockSprite = isHit ? sprites.blockCoinActive : sprites.blockCoin;
-      // Draw one block per ~56px (scale to height x height square blocks)
-      const blockSize = Math.min(height, TILE);
-      const numBlocks = Math.max(1, Math.round(width / blockSize));
-      const actualBlockW = width / numBlocks;
+      const blockSize = Math.min(h, TILE);
+      const numBlocks = Math.max(1, Math.round(w / blockSize));
+      const actualBlockW = Math.round(w / numBlocks);
       for (let i = 0; i < numBlocks; i++) {
-        ctx.drawImage(blockSprite, screenX + i * actualBlockW, y, actualBlockW, height);
+        ctx.drawImage(blockSprite, x + i * actualBlockW, iy, actualBlockW + 1, h);
       }
       break;
     }
 
     case "bouncy": {
-      // Use spring sprite — draw centered in the platform
-      const springW = Math.min(width, height * 1.5);
-      const springX = screenX + (width - springW) / 2;
-      ctx.drawImage(sprites.spring, springX, y, springW, height);
-
-      // Fill sides if platform wider than sprite
-      if (width > springW) {
-        ctx.fillStyle = "#E91E8C";
-        if (springX > screenX) {
-          ctx.fillRect(screenX, y, springX - screenX, height);
-        }
-        const rightStart = springX + springW;
-        if (rightStart < screenX + width) {
-          ctx.fillRect(rightStart, y, screenX + width - rightStart, height);
-        }
-      }
+      const springW = Math.min(w, h * 1.5);
+      const springX = Math.round(x + (w - springW) / 2);
+      ctx.drawImage(sprites.spring, springX, iy, Math.round(springW), h);
       break;
     }
 
     case "icy": {
-      // Dirt tiles tinted light blue for icy look
-      tileImageH(ctx, sprites.dirtTop, screenX, y, screenX + width, TILE, height);
-      // Blue frost tint
+      tileImageH(ctx, sprites.dirtTop, x, iy, x + w, TILE, h);
       ctx.globalAlpha = 0.45;
       ctx.fillStyle = "#B3E5FC";
-      ctx.fillRect(screenX, y, width, height);
+      ctx.fillRect(x, iy, w, h);
       ctx.globalAlpha = 1;
-      // Frost highlight at top
-      ctx.globalAlpha = 0.3;
       ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(screenX, y, width, 3);
+      ctx.globalAlpha = 0.3;
+      ctx.fillRect(x, iy, w, 3);
       ctx.globalAlpha = 1;
       break;
     }
 
     case "crumbling": {
-      // Brick tiles
-      tileImageH(ctx, sprites.brickBrown, screenX, y, screenX + width, TILE, height);
+      tileImageH(ctx, sprites.brickBrown, x, iy, x + w, TILE, h);
       break;
     }
 
     default: {
-      // Fallback: grass cloud middle tiled
-      tileImageH(ctx, sprites.grassCloudMiddle, screenX, y, screenX + width, TILE, height);
+      tileImageH(ctx, sprites.grassCloudMiddle, x, iy, x + w, TILE, h);
       break;
     }
   }
