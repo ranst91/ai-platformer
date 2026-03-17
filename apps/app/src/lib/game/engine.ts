@@ -41,11 +41,61 @@ function initialPlayer(): PlayerState {
   };
 }
 
+/** Hardcoded starter chunks so the game is playable instantly while the AI loads */
+function starterChunks(): LevelChunk[] {
+  return [
+    {
+      chunk_index: 0,
+      platforms: [
+        { x: 0, y: 430, width: 300, height: 30, type: "normal" },
+        { x: 400, y: 400, width: 200, height: 30, type: "normal" },
+        { x: 700, y: 370, width: 250, height: 30, type: "normal" },
+        { x: 200, y: 340, width: 55, height: 30, type: "mystery" },
+      ],
+      enemies: [
+        { x: 150, y: 400, type: "walker", alive: true, direction: 1, moveOffset: 0 },
+        { x: 500, y: 370, type: "walker", alive: true, direction: -1, moveOffset: 0 },
+        { x: 800, y: 330, type: "flyer", alive: true, direction: 1, moveOffset: 0 },
+      ],
+      coins: [
+        { x: 100, y: 390, collected: false },
+        { x: 160, y: 390, collected: false },
+        { x: 450, y: 360, collected: false },
+        { x: 520, y: 360, collected: false },
+        { x: 770, y: 330, collected: false },
+        { x: 230, y: 300, collected: false },
+      ],
+    },
+    {
+      chunk_index: 1,
+      platforms: [
+        { x: 50, y: 420, width: 250, height: 30, type: "normal" },
+        { x: 400, y: 380, width: 180, height: 30, type: "bouncy" },
+        { x: 650, y: 350, width: 300, height: 30, type: "normal" },
+        { x: 500, y: 310, width: 55, height: 30, type: "mystery" },
+      ],
+      enemies: [
+        { x: 130, y: 390, type: "walker", alive: true, direction: 1, moveOffset: 0 },
+        { x: 750, y: 320, type: "walker", alive: true, direction: -1, moveOffset: 0 },
+        { x: 450, y: 320, type: "flyer", alive: true, direction: 1, moveOffset: 0 },
+      ],
+      coins: [
+        { x: 100, y: 380, collected: false },
+        { x: 200, y: 380, collected: false },
+        { x: 450, y: 340, collected: false },
+        { x: 700, y: 310, collected: false },
+        { x: 800, y: 310, collected: false },
+        { x: 528, y: 275, collected: false },
+      ],
+    },
+  ];
+}
+
 function initialGameState(): GameState {
   return {
     player: initialPlayer(),
     cameraX: 0,
-    chunks: [],
+    chunks: starterChunks(),
     score: 0,
     coins: 0,
     lives: 3,
@@ -67,6 +117,7 @@ export class GameEngine {
   private lastTime: number = 0;
   private time: number = 0; // running clock for animations
   private requestingChunks: boolean = false;
+  private requestingChunksTime: number = 0; // when we started requesting
   private lastScore: number = -1;
   private sprites: SpriteAtlas | undefined = undefined;
 
@@ -128,12 +179,32 @@ export class GameEngine {
 
     const merged: LevelChunk[] = chunks.map((incoming) => {
       const existing = existingMap.get(incoming.chunk_index);
-      if (!existing) return incoming;
 
-      // Preserve runtime state for enemies
+      if (!existing) {
+        // NEW chunk — initialize runtime state for all entities
+        return {
+          ...incoming,
+          enemies: (incoming.enemies || []).map((e) => ({
+            ...e,
+            alive: true,
+            direction: 1,
+            moveOffset: 0,
+          })),
+          coins: (incoming.coins || []).map((c) => ({
+            ...c,
+            collected: false,
+          })),
+          platforms: (incoming.platforms || []).map((p) => ({
+            ...p,
+            hit: false,
+          })),
+        };
+      }
+
+      // EXISTING chunk — preserve runtime state
       const enemies = incoming.enemies.map((enemy, i) => {
         const old = existing.enemies[i];
-        if (!old) return enemy;
+        if (!old) return { ...enemy, alive: true, direction: 1, moveOffset: 0 };
         return {
           ...enemy,
           alive: old.alive,
@@ -142,22 +213,21 @@ export class GameEngine {
         };
       });
 
-      // Preserve runtime state for coins
       const coins = incoming.coins.map((coin, i) => {
         const old = existing.coins[i];
-        if (!old) return coin;
+        if (!old) return { ...coin, collected: false };
         return { ...coin, collected: old.collected };
       });
 
-      // Preserve runtime state for platforms
       const platforms = incoming.platforms.map((platform, i) => {
         const old = existing.platforms[i];
-        if (!old) return platform;
+        if (!old) return { ...platform, hit: false };
         return {
           ...platform,
           crumbleTimer: old.crumbleTimer,
           moveOffset: old.moveOffset,
           moveDirection: old.moveDirection,
+          hit: old.hit,
         };
       });
 
@@ -379,6 +449,11 @@ export class GameEngine {
   // ── Chunk generation ──────────────────────────────────────────────────────────
 
   private checkChunkGeneration(): void {
+    // If we've been waiting for chunks for more than 15 seconds, reset the flag
+    // so we can request again (the previous request may have been dropped)
+    if (this.requestingChunks && this.time - this.requestingChunksTime > 15) {
+      this.requestingChunks = false;
+    }
     if (this.requestingChunks) return;
 
     const { player, chunks } = this.state;
@@ -402,6 +477,7 @@ export class GameEngine {
 
     if (nearEnd || notEnoughAhead) {
       this.requestingChunks = true;
+      this.requestingChunksTime = this.time;
       this.callbacks.onNeedChunks?.(player.x);
     }
   }

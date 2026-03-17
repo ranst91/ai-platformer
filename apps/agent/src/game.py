@@ -6,6 +6,8 @@ from langchain.messages import ToolMessage
 from langgraph.types import Command
 from typing import TypedDict, Literal
 
+from src.populate import populate_chunk
+
 
 class Platform(TypedDict):
     x: float
@@ -52,7 +54,7 @@ class GameAgentState(BaseAgentState):
 
 @tool
 def append_chunks(
-    new_chunks: list[LevelChunk],
+    new_chunks: list[dict],
     difficulty: float,
     dm_message: str,
     suggestions: list[Suggestion],
@@ -60,21 +62,27 @@ def append_chunks(
 ) -> Command:
     """Append new level chunks to the existing game world.
 
-    Use this for ongoing chunk generation. Only provide the NEW chunks —
-    existing chunks are preserved automatically. This avoids re-sending
-    the entire world on every generation call.
+    You only need to provide platforms in each chunk — enemies, coins, and
+    mystery blocks are added automatically. Just focus on designing fun
+    platform layouts!
+
+    Each chunk needs: chunk_index and platforms (list of {x, y, width, height, type}).
     """
     existing = runtime.state.get("level_chunks", [])
+
+    # Populate each chunk with enemies, coins, mystery blocks
+    populated = [populate_chunk(chunk, difficulty) for chunk in new_chunks]
+
     return Command(
         update={
-            "level_chunks": existing + new_chunks,
+            "level_chunks": existing + populated,
             "difficulty": difficulty,
             "game_phase": "playing",
             "dm_message": dm_message,
             "suggestions": suggestions,
             "messages": [
                 ToolMessage(
-                    content=f"Appended {len(new_chunks)} chunks (total: {len(existing) + len(new_chunks)})",
+                    content=f"Appended {len(populated)} chunks (total: {len(existing) + len(populated)})",
                     tool_call_id=runtime.tool_call_id,
                 )
             ],
@@ -84,7 +92,7 @@ def append_chunks(
 
 @tool
 def reset_game(
-    level_chunks: list[LevelChunk],
+    level_chunks: list[dict],
     difficulty: float,
     dm_message: str,
     suggestions: list[Suggestion],
@@ -94,11 +102,14 @@ def reset_game(
     """Reset the game with a fresh set of level chunks.
 
     Use this ONLY when starting a new game or restarting after game over.
-    Replaces ALL existing chunks.
+    You only need to provide platforms — enemies, coins, and mystery blocks
+    are added automatically.
     """
+    populated = [populate_chunk(chunk, difficulty) for chunk in level_chunks]
+
     return Command(
         update={
-            "level_chunks": level_chunks,
+            "level_chunks": populated,
             "difficulty": difficulty,
             "game_phase": "playing",
             "dm_message": dm_message,

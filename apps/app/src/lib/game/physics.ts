@@ -96,8 +96,15 @@ export function updatePlayer(
       // Crossing detection: previous bottom was above platform top, new bottom is at/below it
       if (prevBottom <= platTop && newBottom >= platTop) {
         player.y = platTop - PLAYER_HEIGHT;
-        player.vy = 0;
-        player.onGround = true;
+
+        if (platform.type === "bouncy") {
+          // Bouncy platform — launch the player high!
+          player.vy = PLAYER_JUMP_VELOCITY * 1.5;
+          player.onGround = false;
+        } else {
+          player.vy = 0;
+          player.onGround = true;
+        }
         landed = true;
         break;
       }
@@ -121,17 +128,17 @@ export function checkEnemyCollision(
   // We assume enemy world x is already resolved before calling this
   if (!aabbOverlap(
     player.x, player.y, PLAYER_WIDTH, PLAYER_HEIGHT,
-    enemy.x, enemy.y, 30, 30
+    enemy.x - 4, enemy.y - 4, 38, 38
   )) {
     return "none";
   }
 
   // Player stomping enemy: player falling (vy > 0) and player's feet are
-  // near the top of the enemy
+  // near the top of the enemy — slightly generous for better game feel
   const playerBottom = player.y + PLAYER_HEIGHT;
   const enemyTop = enemy.y;
 
-  if (player.vy > 0 && playerBottom <= enemyTop + 16) {
+  if (player.vy > 0 && playerBottom <= enemyTop + 20) {
     return "kill";
   }
 

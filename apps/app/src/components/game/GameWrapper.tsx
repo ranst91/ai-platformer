@@ -24,10 +24,6 @@ export function GameWrapper() {
   useEffect(() => {
     if (agentState?.level_chunks?.length) {
       gameRef.current?.engine?.updateLevelChunks(agentState.level_chunks);
-      if (gamePhase === "loading") {
-        gameRef.current?.engine?.startPlaying();
-        setGamePhase("playing");
-      }
     }
   }, [agentState?.level_chunks]);
 
@@ -57,14 +53,16 @@ export function GameWrapper() {
 
   // --- Start game ---
   const startGame = useCallback(() => {
-    setGamePhase("loading");
+    // Start playing IMMEDIATELY with hardcoded starter chunks (in engine)
+    gameRef.current?.engine?.startPlaying();
+    setGamePhase("playing");
+    // Ask the AI to generate more chunks in the background — they'll
+    // arrive and extend the world while the player is already running
     sendToAgent(
-      "Start a new game! Use reset_game to generate 6 level chunks (chunk_index 0 through 5). " +
-      "Set difficulty to 0.4 (include some enemies from the start!). Set lives to 3. " +
-      "IMPORTANT: Include at least 1-2 enemies per chunk (walkers on platforms) and " +
-      "2-3 mystery blocks (type='mystery', small width ~50-60px, height 30px) placed above the main path. " +
-      "Welcome the player with a fun dm_message. " +
-      "Include 3-4 suggestion buttons for the player."
+      "Start a new game! Use append_chunks with 4 chunks (chunk_index 2-5). " +
+      "Set difficulty to 0.4. Design varied platform layouts — " +
+      "mix heights, add gaps to jump over, make it interesting! " +
+      "Welcome the player with a snarky dm_message and include suggestion buttons."
     );
   }, [sendToAgent]);
 
@@ -78,11 +76,10 @@ export function GameWrapper() {
       const nextIndex = maxIndex + 1;
 
       sendToAgent(
-        `Player reached x=${Math.round(playerX)}. Use append_chunks to generate 3 more chunks ` +
-        `(chunk_index ${nextIndex}, ${nextIndex + 1}, and ${nextIndex + 2}). ` +
-        `Current difficulty: ${agentState?.difficulty || 0.4}. Player deaths: ${agentState?.deaths || 0}. ` +
-        `IMPORTANT: Include 1-2 enemies per chunk, 2-3 mystery blocks (type='mystery', width 50-60, height 30), ` +
-        `and 4-5 coins per chunk. Make it fun! Update suggestions.`
+        `Player at x=${Math.round(playerX)}. Use append_chunks with 3 new chunks ` +
+        `(chunk_index ${nextIndex}, ${nextIndex + 1}, ${nextIndex + 2}). ` +
+        `Difficulty: ${agentState?.difficulty || 0.4}. Deaths: ${agentState?.deaths || 0}. ` +
+        `Design interesting platform layouts with varied heights and gaps!`
       );
     },
     [agentState, sendToAgent],
@@ -107,9 +104,8 @@ export function GameWrapper() {
       }, 1500);
 
       sendToAgent(
-        `Player died! Total deaths: ${deaths}. ` +
-        `Use append_chunks to react — update dm_message, adjust difficulty if player is struggling. ` +
-        `Keep existing chunks, no new chunks needed unless difficulty changed.`
+        `Player died! Deaths: ${deaths}. React with a snarky dm_message. ` +
+        `If deaths > 3, lower difficulty. Use append_chunks with 1 chunk to update state.`
       );
     },
     [sendToAgent],
@@ -119,10 +115,8 @@ export function GameWrapper() {
   const handleCommand = useCallback(
     (command: string) => {
       sendToAgent(
-        `Player command: "${command}". ` +
-        `Respond to this command — adjust difficulty, generate new chunks if appropriate, ` +
-        `update dm_message with a reaction, and provide new suggestion buttons. ` +
-        `Keep all existing chunks.`
+        `Player command: "${command}". React — adjust difficulty if needed, ` +
+        `update dm_message, provide new suggestions. Use append_chunks with 2 chunks.`
       );
     },
     [sendToAgent],
@@ -171,14 +165,6 @@ export function GameWrapper() {
         </button>
       )}
 
-      {gamePhase === "loading" && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-950/80">
-          <div className="text-center font-mono text-white">
-            <div className="text-2xl font-bold mb-2 animate-pulse">Generating world...</div>
-            <div className="text-sm text-gray-400">The Dungeon Master is preparing your fate</div>
-          </div>
-        </div>
-      )}
 
       {agent.isRunning && gamePhase === "playing" && (
         <div className="absolute top-14 right-[calc(50%-390px)] px-2 py-1 bg-purple-600/60 rounded text-xs text-white font-mono animate-pulse">
