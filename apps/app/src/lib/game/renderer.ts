@@ -83,33 +83,20 @@ function drawBackgroundSprites(
   camera: Camera,
   sprites: SpriteAtlas
 ): void {
-  // NOTE: clearCanvas() already draws the gradient sky, so we do NOT
-  // draw a solid sky tile here — that was causing a color mismatch (blue stripe).
+  const T = 256;
 
-  const T = 256; // Kenney background tiles are 256x256
+  // The cloud sprite IS the sky — it has sky-blue at top and white
+  // clouds at bottom. Tile it across the FULL sky area at full opacity.
+  // No gradient underneath, no alpha, no clipping = no seam.
+  tileParallaxRow(ctx, sprites.bgClouds, camera.x * 0.15, 0, T, T);
 
-  // Layer 1 (parallax 0.15): Clouds in the upper sky area
-  // The cloud sprite has light blue at top and white clouds at bottom.
-  // Draw it in the upper portion only, clipped so the bottom edge
-  // doesn't create a visible seam.
+  // Hills — clip above ground so the wavy green bottom (which scrolls
+  // at a different rate than the ground) never overlaps ground tiles.
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, 0, CANVAS_WIDTH, 220); // clip to upper sky
+  ctx.rect(0, 0, CANVAS_WIDTH, GROUND_Y);
   ctx.clip();
-  ctx.globalAlpha = 0.9;
-  tileParallaxRow(ctx, sprites.bgClouds, camera.x * 0.15, -40, T, T);
-  ctx.globalAlpha = 1;
-  ctx.restore();
-
-  // Layer 2 (parallax 0.25): Hills in the mid-ground
-  // Draw the hills HIGH enough that their wavy green bottom does NOT
-  // touch the ground tiles (which scroll at 1:1). This prevents the
-  // "wavy attachment" visual glitch.
-  const hillY = GROUND_Y - T * 0.65; // top of hills ~185px above ground
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, 0, CANVAS_WIDTH, GROUND_Y); // clip above ground line
-  ctx.clip();
+  const hillY = GROUND_Y - T * 0.7;
   tileParallaxRow(ctx, sprites.bgHills, camera.x * 0.25, hillY, T, T);
   ctx.restore();
 }
