@@ -56,14 +56,14 @@ export function drawBackground(
   sprites?: SpriteAtlas
 ): void {
   if (sprites?.loaded) {
-    drawBackgroundSprites(ctx, camera, sprites);
+    drawBackgroundAllKenney(ctx, camera, sprites);
   } else {
     drawBackgroundProcedural(ctx, camera);
   }
 }
 
-/** Seamlessly tile a sprite horizontally with parallax offset */
-function tileParallaxRow(
+/** Tile a sprite horizontally. ALL coords rounded to int, +1px overlap to kill seams. */
+function tileRow(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   parallaxOffset: number,
@@ -71,33 +71,39 @@ function tileParallaxRow(
   tileW: number,
   tileH: number,
 ): void {
-  // Compute first tile X so we always cover the screen with no gaps
-  const startX = -(((parallaxOffset % tileW) + tileW) % tileW);
+  const startX = Math.round(-(((parallaxOffset % tileW) + tileW) % tileW));
+  const iy = Math.round(y);
   for (let tx = startX; tx < CANVAS_WIDTH + tileW; tx += tileW) {
-    ctx.drawImage(img, tx, y, tileW, tileH);
+    ctx.drawImage(img, tx, iy, tileW + 1, tileH + 1);
   }
 }
 
-function drawBackgroundSprites(
+function drawBackgroundAllKenney(
   ctx: CanvasRenderingContext2D,
   camera: Camera,
   sprites: SpriteAtlas
 ): void {
   const T = 256;
+  const SKY_H = GROUND_Y; // 520px
 
-  // The cloud sprite IS the sky — it has sky-blue at top and white
-  // clouds at bottom. Tile it across the FULL sky area at full opacity.
-  // No gradient underneath, no alpha, no clipping = no seam.
-  tileParallaxRow(ctx, sprites.bgClouds, camera.x * 0.15, 0, T, T);
+  // Sky: stretch the solid sky to fill the ENTIRE sky area.
+  // One drawImage, no tiling, no seams. This is the base color.
+  ctx.drawImage(sprites.bgSolidSky, 0, 0, CANVAS_WIDTH, SKY_H);
 
-  // Hills — clip above ground so the wavy green bottom (which scrolls
-  // at a different rate than the ground) never overlaps ground tiles.
+  // Clouds: tile horizontally at NATURAL height (256px) at the top.
+  // The bottom of the cloud sprite matches the solid sky color (same pack),
+  // and below it is the stretched solid sky — same color = no seam.
+  // The 40 there is what makes the clouds touch the white BG below it!
+  tileRow(ctx, sprites.bgClouds, camera.x * 0.15, 40, T, T);
+
+  // Hills: tile horizontally at NATURAL height, positioned in the lower sky.
+  // Clip above ground to avoid parallax mismatch with ground tiles.
   ctx.save();
   ctx.beginPath();
   ctx.rect(0, 0, CANVAS_WIDTH, GROUND_Y);
   ctx.clip();
-  const hillY = GROUND_Y - T * 0.7;
-  tileParallaxRow(ctx, sprites.bgHills, camera.x * 0.25, hillY, T, T);
+  const hillY = Math.round(GROUND_Y - T + 30);
+  tileRow(ctx, sprites.bgHills, camera.x * 0.25, hillY, T, T);
   ctx.restore();
 }
 
@@ -229,18 +235,19 @@ function drawGroundSprites(
   sprites: SpriteAtlas
 ): void {
   const TILE = 64;
-  // Ground scrolls 1:1 with the camera (no parallax — it's part of the world)
-  const startX = -(((Math.floor(camera.x) % TILE) + TILE) % TILE);
+  // Ground scrolls 1:1 with camera — use integer offset
+  const rawOffset = Math.floor(camera.x) % TILE;
+  const startX = Math.floor(-(((rawOffset) + TILE) % TILE));
 
-  // Top grass row
+  // Top grass row — +1 overlap to prevent seams
   for (let tx = startX; tx < CANVAS_WIDTH + TILE; tx += TILE) {
-    ctx.drawImage(sprites.grassTop, tx, GROUND_Y, TILE, TILE);
+    ctx.drawImage(sprites.grassTop, tx, GROUND_Y, TILE + 1, TILE + 1);
   }
 
-  // Dirt fill below (just needs to cover GROUND_HEIGHT below the grass)
+  // Dirt fill below — +1 overlap on both axes
   for (let tx = startX; tx < CANVAS_WIDTH + TILE; tx += TILE) {
     for (let ty = GROUND_Y + TILE; ty < GROUND_Y + GROUND_HEIGHT + TILE; ty += TILE) {
-      ctx.drawImage(sprites.dirtCenter, tx, ty, TILE, TILE);
+      ctx.drawImage(sprites.dirtCenter, tx, ty, TILE + 1, TILE + 1);
     }
   }
 }
@@ -330,11 +337,12 @@ function tileImageH(
 ): void {
   ctx.save();
   ctx.beginPath();
-  ctx.rect(startX, y, endX - startX, tileH);
+  ctx.rect(Math.floor(startX), Math.floor(y), Math.ceil(endX - startX), Math.ceil(tileH));
   ctx.clip();
   const firstTileX = Math.floor(startX / tileW) * tileW;
   for (let tx = firstTileX; tx < endX; tx += tileW) {
-    ctx.drawImage(img, tx, y, tileW, tileH);
+    // +1 overlap prevents sub-pixel seams between adjacent tiles
+    ctx.drawImage(img, Math.floor(tx), Math.floor(y), tileW + 1, tileH + 1);
   }
   ctx.restore();
 }
