@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 import { GameEngine, GameEventCallback } from "@/lib/game/engine";
+import { loadSprites } from "@/lib/game/sprites";
 
 export interface GameCanvasHandle {
   engine: GameEngine | null;
@@ -28,6 +29,16 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
       engine.setCallbacks(callbacks);
       engine.start();
       engineRef.current = engine;
+
+      // Load sprites asynchronously and pass to engine once ready
+      loadSprites()
+        .then((sprites) => {
+          engine.setSprites(sprites);
+        })
+        .catch((err) => {
+          console.warn("Sprite loading failed, using procedural fallback:", err);
+        });
+
       return () => {
         engine.stop();
         engineRef.current = null;

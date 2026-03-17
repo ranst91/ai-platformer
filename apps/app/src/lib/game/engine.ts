@@ -17,6 +17,7 @@ import { checkEnemyCollision, checkCoinCollision, platformWorldX } from "./physi
 import { createCamera, updateCamera } from "./camera";
 import type { Camera } from "./camera";
 import { clearCanvas, drawBackground, drawGround, drawChunks, drawPlayer } from "./renderer";
+import type { SpriteAtlas } from "./sprites";
 
 // ─── Callback type ────────────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ export class GameEngine {
   private time: number = 0; // running clock for animations
   private requestingChunks: boolean = false;
   private lastScore: number = -1;
+  private sprites: SpriteAtlas | undefined = undefined;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -83,6 +85,10 @@ export class GameEngine {
 
   setCallbacks(callbacks: GameEventCallback): void {
     this.callbacks = callbacks;
+  }
+
+  setSprites(sprites: SpriteAtlas): void {
+    this.sprites = sprites;
   }
 
   start(): void {
@@ -403,16 +409,16 @@ export class GameEngine {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   private render(): void {
-    const { ctx, camera, state, time } = this;
+    const { ctx, camera, state, time, sprites } = this;
     const { player, chunks, gamePhase, score, coins, lives, deaths } = state;
 
     clearCanvas(ctx);
-    drawBackground(ctx, camera);
-    drawGround(ctx, camera);
-    drawChunks(ctx, chunks, camera, time);
+    drawBackground(ctx, camera, sprites);
+    drawGround(ctx, camera, sprites);
+    drawChunks(ctx, chunks, camera, time, sprites);
 
     if (gamePhase === "playing" || gamePhase === "dead") {
-      drawPlayer(ctx, player, camera);
+      drawPlayer(ctx, player, camera, sprites, time);
     }
 
     // ── Overlays ────────────────────────────────────────────────────────────

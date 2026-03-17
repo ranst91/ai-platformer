@@ -13,6 +13,7 @@ import {
   GROUND_HEIGHT,
   COLORS,
 } from "./constants";
+import type { SpriteAtlas } from "./sprites";
 
 // ─── Clear ───────────────────────────────────────────────────────────────────
 
@@ -49,7 +50,53 @@ function drawCloud(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: num
   ctx.fill();
 }
 
-export function drawBackground(ctx: CanvasRenderingContext2D, camera: Camera): void {
+export function drawBackground(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  sprites?: SpriteAtlas
+): void {
+  if (sprites?.loaded) {
+    drawBackgroundSprites(ctx, camera, sprites);
+  } else {
+    drawBackgroundProcedural(ctx, camera);
+  }
+}
+
+function drawBackgroundSprites(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  sprites: SpriteAtlas
+): void {
+  const TILE_SIZE = 256; // Kenney background tiles are 256x256
+
+  // ── Layer 1 (far, parallax 0.1): Solid sky base ───────────────────────────
+  const farOff = camera.x * 0.1;
+  const farStartX = -((farOff % TILE_SIZE) + TILE_SIZE) % TILE_SIZE;
+  for (let tx = farStartX; tx < CANVAS_WIDTH; tx += TILE_SIZE) {
+    // Fill the full canvas height with sky tiles
+    for (let ty = 0; ty < CANVAS_HEIGHT; ty += TILE_SIZE) {
+      ctx.drawImage(sprites.bgSolidSky, tx, ty, TILE_SIZE, TILE_SIZE);
+    }
+  }
+
+  // ── Layer 2 (mid, parallax 0.3): Hills at ground level ────────────────────
+  const midOff = camera.x * 0.3;
+  const midStartX = -((midOff % TILE_SIZE) + TILE_SIZE) % TILE_SIZE;
+  // Position hills so their base aligns with the ground
+  const hillY = GROUND_Y - TILE_SIZE + 20;
+  for (let tx = midStartX; tx < CANVAS_WIDTH; tx += TILE_SIZE) {
+    ctx.drawImage(sprites.bgHills, tx, hillY, TILE_SIZE, TILE_SIZE);
+  }
+
+  // ── Layer 3 (near, parallax 0.5): Cloud layer across top ──────────────────
+  const nearOff = camera.x * 0.5;
+  const nearStartX = -((nearOff % TILE_SIZE) + TILE_SIZE) % TILE_SIZE;
+  for (let tx = nearStartX; tx < CANVAS_WIDTH; tx += TILE_SIZE) {
+    ctx.drawImage(sprites.bgClouds, tx, 0, TILE_SIZE, TILE_SIZE);
+  }
+}
+
+function drawBackgroundProcedural(ctx: CanvasRenderingContext2D, camera: Camera): void {
   const TILE = 1600; // world pixels before clouds repeat
 
   // ── Far layer: distant blue-tinted mountains (parallax 0.1) ──────────────
@@ -159,7 +206,42 @@ export function drawBackground(ctx: CanvasRenderingContext2D, camera: Camera): v
 
 // ─── Ground ───────────────────────────────────────────────────────────────────
 
-export function drawGround(ctx: CanvasRenderingContext2D, camera: Camera): void {
+export function drawGround(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  sprites?: SpriteAtlas
+): void {
+  if (sprites?.loaded) {
+    drawGroundSprites(ctx, camera, sprites);
+  } else {
+    drawGroundProcedural(ctx, camera);
+  }
+}
+
+function drawGroundSprites(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  sprites: SpriteAtlas
+): void {
+  const TILE = 64;
+  // Parallax offset so tiles scroll with the world
+  const offsetX = Math.floor(camera.x) % TILE;
+
+  // Top grass row — one tile tall, aligned to ground
+  for (let tx = -TILE + (-offsetX % TILE + TILE) % TILE; tx < CANVAS_WIDTH + TILE; tx += TILE) {
+    ctx.drawImage(sprites.grassTop, tx, GROUND_Y, TILE, TILE);
+  }
+
+  // Dirt fill below grass top row
+  const dirtStartY = GROUND_Y + TILE;
+  for (let ty = dirtStartY; ty < GROUND_Y + GROUND_HEIGHT + TILE; ty += TILE) {
+    for (let tx = -TILE + (-offsetX % TILE + TILE) % TILE; tx < CANVAS_WIDTH + TILE; tx += TILE) {
+      ctx.drawImage(sprites.dirtCenter, tx, ty, TILE, TILE);
+    }
+  }
+}
+
+function drawGroundProcedural(ctx: CanvasRenderingContext2D, camera: Camera): void {
   const GRASS_HEIGHT = 10;
   const HIGHLIGHT_HEIGHT = 3;
   const DARK_LAYER = 16;
@@ -232,16 +314,150 @@ function fillRoundRect(
   ctx.fill();
 }
 
+/** Tile a sprite horizontally across a range, clipping to [startX, endX] */
+function tileImageH(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  startX: number,
+  y: number,
+  endX: number,
+  tileW: number,
+  tileH: number
+): void {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(startX, y, endX - startX, tileH);
+  ctx.clip();
+  const firstTileX = Math.floor(startX / tileW) * tileW;
+  for (let tx = firstTileX; tx < endX; tx += tileW) {
+    ctx.drawImage(img, tx, y, tileW, tileH);
+  }
+  ctx.restore();
+}
+
 export function drawPlatform(
   ctx: CanvasRenderingContext2D,
   platform: Platform,
   worldX: number,
-  camera: Camera
+  camera: Camera,
+  sprites?: SpriteAtlas
 ): void {
   const screenX = worldX - camera.x;
 
   if (screenX + platform.width < 0 || screenX > CANVAS_WIDTH) return;
 
+  if (sprites?.loaded) {
+    drawPlatformSprites(ctx, platform, screenX, sprites);
+  } else {
+    drawPlatformProcedural(ctx, platform, screenX);
+  }
+}
+
+function drawPlatformSprites(
+  ctx: CanvasRenderingContext2D,
+  platform: Platform,
+  screenX: number,
+  sprites: SpriteAtlas
+): void {
+  const { y, width, height, type } = platform;
+  const TILE = 64;
+
+  switch (type) {
+    case "normal":
+    case "moving": {
+      // Grass cloud tiles: left + middle (tiled) + right
+      if (width <= TILE) {
+        // Narrow platform: stretch a single middle tile
+        ctx.drawImage(sprites.grassCloudMiddle, screenX, y, width, height);
+      } else {
+        const leftW = Math.min(TILE, Math.floor(width / 3));
+        const rightW = Math.min(TILE, Math.floor(width / 3));
+        const midW = width - leftW - rightW;
+        const midStartX = screenX + leftW;
+
+        ctx.drawImage(sprites.grassCloudLeft,   screenX,           y, leftW,  height);
+        tileImageH(ctx, sprites.grassCloudMiddle, midStartX, y, midStartX + midW, TILE, height);
+        ctx.drawImage(sprites.grassCloudRight,  screenX + width - rightW, y, rightW, height);
+      }
+
+      // Moving indicator: subtle blue tint overlay
+      if (type === "moving") {
+        ctx.globalAlpha = 0.18;
+        ctx.fillStyle = "#4FC3F7";
+        ctx.fillRect(screenX, y, width, height);
+        ctx.globalAlpha = 1;
+      }
+      break;
+    }
+
+    case "mystery": {
+      const isHit = platform.hit === true;
+      const blockSprite = isHit ? sprites.blockCoinActive : sprites.blockCoin;
+      // Draw one block per ~56px (scale to height x height square blocks)
+      const blockSize = Math.min(height, TILE);
+      const numBlocks = Math.max(1, Math.round(width / blockSize));
+      const actualBlockW = width / numBlocks;
+      for (let i = 0; i < numBlocks; i++) {
+        ctx.drawImage(blockSprite, screenX + i * actualBlockW, y, actualBlockW, height);
+      }
+      break;
+    }
+
+    case "bouncy": {
+      // Use spring sprite — draw centered in the platform
+      const springW = Math.min(width, height * 1.5);
+      const springX = screenX + (width - springW) / 2;
+      ctx.drawImage(sprites.spring, springX, y, springW, height);
+
+      // Fill sides if platform wider than sprite
+      if (width > springW) {
+        ctx.fillStyle = "#E91E8C";
+        if (springX > screenX) {
+          ctx.fillRect(screenX, y, springX - screenX, height);
+        }
+        const rightStart = springX + springW;
+        if (rightStart < screenX + width) {
+          ctx.fillRect(rightStart, y, screenX + width - rightStart, height);
+        }
+      }
+      break;
+    }
+
+    case "icy": {
+      // Dirt tiles tinted light blue for icy look
+      tileImageH(ctx, sprites.dirtTop, screenX, y, screenX + width, TILE, height);
+      // Blue frost tint
+      ctx.globalAlpha = 0.45;
+      ctx.fillStyle = "#B3E5FC";
+      ctx.fillRect(screenX, y, width, height);
+      ctx.globalAlpha = 1;
+      // Frost highlight at top
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(screenX, y, width, 3);
+      ctx.globalAlpha = 1;
+      break;
+    }
+
+    case "crumbling": {
+      // Brick tiles
+      tileImageH(ctx, sprites.brickBrown, screenX, y, screenX + width, TILE, height);
+      break;
+    }
+
+    default: {
+      // Fallback: grass cloud middle tiled
+      tileImageH(ctx, sprites.grassCloudMiddle, screenX, y, screenX + width, TILE, height);
+      break;
+    }
+  }
+}
+
+function drawPlatformProcedural(
+  ctx: CanvasRenderingContext2D,
+  platform: Platform,
+  screenX: number
+): void {
   const { y, width, height, type } = platform;
   const GRASS_H = 8;
   const CORNER_R = 4;
@@ -479,6 +695,60 @@ export function drawPlatform(
 export function drawPlayer(
   ctx: CanvasRenderingContext2D,
   player: PlayerState,
+  camera: Camera,
+  sprites?: SpriteAtlas,
+  time: number = 0
+): void {
+  if (sprites?.loaded) {
+    drawPlayerSprites(ctx, player, camera, sprites, time);
+  } else {
+    drawPlayerProcedural(ctx, player, camera);
+  }
+}
+
+function drawPlayerSprites(
+  ctx: CanvasRenderingContext2D,
+  player: PlayerState,
+  camera: Camera,
+  sprites: SpriteAtlas,
+  time: number
+): void {
+  const screenX = player.x - camera.x;
+  const screenY = player.y;
+  const { facing, vx, vy, onGround } = player;
+
+  // Pick the right sprite frame
+  let sprite: HTMLImageElement;
+  if (!onGround) {
+    sprite = sprites.playerJump;
+  } else if (Math.abs(vx) > 10) {
+    // Walk animation alternates at ~6 fps
+    const frame = Math.floor(time * 6) % 2;
+    sprite = frame === 0 ? sprites.playerWalkA : sprites.playerWalkB;
+  } else {
+    sprite = sprites.playerIdle;
+  }
+
+  // Draw slightly larger than hitbox for visual appeal
+  const drawW = 50;
+  const drawH = 55;
+  const drawX = screenX - 10;
+  const drawY = screenY - 10;
+
+  ctx.save();
+  if (facing === -1) {
+    // Flip horizontally
+    ctx.scale(-1, 1);
+    ctx.drawImage(sprite, -(drawX + drawW), drawY, drawW, drawH);
+  } else {
+    ctx.drawImage(sprite, drawX, drawY, drawW, drawH);
+  }
+  ctx.restore();
+}
+
+function drawPlayerProcedural(
+  ctx: CanvasRenderingContext2D,
+  player: PlayerState,
   camera: Camera
 ): void {
   const screenX = player.x - camera.x;
@@ -607,7 +877,8 @@ export function drawEnemy(
   enemy: Enemy,
   worldX: number,
   camera: Camera,
-  time: number = 0
+  time: number = 0,
+  sprites?: SpriteAtlas
 ): void {
   if (!enemy.alive) return;
 
@@ -618,6 +889,71 @@ export function drawEnemy(
   const SIZE = 30;
 
   if (screenX + SIZE < 0 || screenX > CANVAS_WIDTH) return;
+
+  if (sprites?.loaded) {
+    drawEnemySprites(ctx, enemy, screenX, screenY, sprites, time);
+  } else {
+    drawEnemyProcedural(ctx, enemy, screenX, screenY, time);
+  }
+}
+
+function drawEnemySprites(
+  ctx: CanvasRenderingContext2D,
+  enemy: Enemy,
+  screenX: number,
+  screenY: number,
+  sprites: SpriteAtlas,
+  time: number
+): void {
+  const DRAW_SIZE = 40; // Slightly larger than hitbox for visual appeal
+
+  switch (enemy.type) {
+    case "walker": {
+      // Alternate walk frames at ~4 fps
+      const frame = Math.floor(time * 4) % 2;
+      const sprite = frame === 0 ? sprites.ladybugWalkA : sprites.ladybugWalkB;
+      ctx.save();
+      if (enemy.direction === -1) {
+        ctx.scale(-1, 1);
+        ctx.drawImage(sprite, -(screenX + DRAW_SIZE), screenY - 5, DRAW_SIZE, DRAW_SIZE);
+      } else {
+        ctx.drawImage(sprite, screenX - 5, screenY - 5, DRAW_SIZE, DRAW_SIZE);
+      }
+      ctx.restore();
+      break;
+    }
+
+    case "flyer": {
+      // Alternate fly frames at ~8 fps for wing flapping
+      const frame = Math.floor(time * 8) % 2;
+      const sprite = frame === 0 ? sprites.flyA : sprites.flyB;
+      ctx.save();
+      if (enemy.direction === -1) {
+        ctx.scale(-1, 1);
+        ctx.drawImage(sprite, -(screenX + DRAW_SIZE), screenY - 5, DRAW_SIZE, DRAW_SIZE);
+      } else {
+        ctx.drawImage(sprite, screenX - 5, screenY - 5, DRAW_SIZE, DRAW_SIZE);
+      }
+      ctx.restore();
+      break;
+    }
+
+    case "shooter": {
+      // Frog — stationary
+      ctx.drawImage(sprites.frogIdle, screenX - 5, screenY - 5, DRAW_SIZE, DRAW_SIZE);
+      break;
+    }
+  }
+}
+
+function drawEnemyProcedural(
+  ctx: CanvasRenderingContext2D,
+  enemy: Enemy,
+  screenX: number,
+  screenY: number,
+  time: number
+): void {
+  const SIZE = 30;
 
   switch (enemy.type) {
     case "walker": {
@@ -843,12 +1179,50 @@ export function drawCoin(
   coinWorldX: number,
   coinY: number,
   camera: Camera,
-  time: number
+  time: number,
+  sprites?: SpriteAtlas
 ): void {
   const screenX = coinWorldX - camera.x;
 
   if (screenX + 20 < 0 || screenX - 20 > CANVAS_WIDTH) return;
 
+  if (sprites?.loaded) {
+    drawCoinSprites(ctx, screenX, coinY, time, sprites);
+  } else {
+    drawCoinProcedural(ctx, screenX, coinY, time);
+  }
+}
+
+function drawCoinSprites(
+  ctx: CanvasRenderingContext2D,
+  screenX: number,
+  coinY: number,
+  time: number,
+  sprites: SpriteAtlas
+): void {
+  const DRAW_SIZE = 28;
+  // Bobbing: ±4 px at ~1 Hz
+  const bobY = coinY + Math.sin(time * 2 * Math.PI) * 4;
+
+  // Alternate front/side views for spinning effect
+  const spinFrame = Math.floor(time * 6) % 2;
+  const sprite = spinFrame === 0 ? sprites.coinGold : sprites.coinGoldSide;
+
+  ctx.drawImage(
+    sprite,
+    screenX - DRAW_SIZE / 2,
+    bobY - DRAW_SIZE / 2,
+    DRAW_SIZE,
+    DRAW_SIZE
+  );
+}
+
+function drawCoinProcedural(
+  ctx: CanvasRenderingContext2D,
+  screenX: number,
+  coinY: number,
+  time: number
+): void {
   const RADIUS = 10;
   // Bobbing: ±4 px at ~1 Hz
   const bobY = coinY + Math.sin(time * 2 * Math.PI) * 4;
@@ -926,7 +1300,8 @@ export function drawChunks(
   ctx: CanvasRenderingContext2D,
   chunks: LevelChunk[],
   camera: Camera,
-  time: number
+  time: number,
+  sprites?: SpriteAtlas
 ): void {
   for (const chunk of chunks) {
     const chunkScreenX = chunk.chunk_index * CHUNK_WIDTH - camera.x;
@@ -937,21 +1312,21 @@ export function drawChunks(
     // Platforms
     for (const platform of chunk.platforms) {
       const worldX = platform.x + chunk.chunk_index * CHUNK_WIDTH;
-      drawPlatform(ctx, platform, worldX, camera);
+      drawPlatform(ctx, platform, worldX, camera, sprites);
     }
 
     // Coins
     for (const coin of chunk.coins) {
       if (coin.collected) continue;
       const worldX = coin.x + chunk.chunk_index * CHUNK_WIDTH;
-      drawCoin(ctx, worldX, coin.y, camera, time);
+      drawCoin(ctx, worldX, coin.y, camera, time, sprites);
     }
 
     // Enemies
     for (const enemy of chunk.enemies) {
       if (!enemy.alive) continue;
       const worldX = enemy.x + chunk.chunk_index * CHUNK_WIDTH + (enemy.moveOffset ?? 0);
-      drawEnemy(ctx, enemy, worldX, camera, time);
+      drawEnemy(ctx, enemy, worldX, camera, time, sprites);
     }
   }
 }
