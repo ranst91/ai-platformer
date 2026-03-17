@@ -62,38 +62,43 @@ export function drawBackground(
   }
 }
 
+/** Seamlessly tile a sprite horizontally with parallax offset */
+function tileParallaxRow(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  parallaxOffset: number,
+  y: number,
+  tileW: number,
+  tileH: number,
+): void {
+  // Compute first tile X so we always cover the screen with no gaps
+  const startX = -(((parallaxOffset % tileW) + tileW) % tileW);
+  for (let tx = startX; tx < CANVAS_WIDTH + tileW; tx += tileW) {
+    ctx.drawImage(img, tx, y, tileW, tileH);
+  }
+}
+
 function drawBackgroundSprites(
   ctx: CanvasRenderingContext2D,
   camera: Camera,
   sprites: SpriteAtlas
 ): void {
-  const TILE_SIZE = 256; // Kenney background tiles are 256x256
+  const T = 256; // Kenney background tiles are 256x256
 
-  // ── Layer 1 (far, parallax 0.1): Solid sky base ───────────────────────────
-  const farOff = camera.x * 0.1;
-  const farStartX = -((farOff % TILE_SIZE) + TILE_SIZE) % TILE_SIZE;
-  for (let tx = farStartX; tx < CANVAS_WIDTH; tx += TILE_SIZE) {
-    // Fill the full canvas height with sky tiles
-    for (let ty = 0; ty < CANVAS_HEIGHT; ty += TILE_SIZE) {
-      ctx.drawImage(sprites.bgSolidSky, tx, ty, TILE_SIZE, TILE_SIZE);
-    }
-  }
+  // Layer 1: Solid sky — fill entire canvas as flat base (no parallax needed)
+  ctx.drawImage(sprites.bgSolidSky, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-  // ── Layer 2 (mid, parallax 0.3): Hills at ground level ────────────────────
-  const midOff = camera.x * 0.3;
-  const midStartX = -((midOff % TILE_SIZE) + TILE_SIZE) % TILE_SIZE;
-  // Position hills so their base aligns with the ground
-  const hillY = GROUND_Y - TILE_SIZE + 20;
-  for (let tx = midStartX; tx < CANVAS_WIDTH; tx += TILE_SIZE) {
-    ctx.drawImage(sprites.bgHills, tx, hillY, TILE_SIZE, TILE_SIZE);
-  }
+  // Layer 2 (parallax 0.2): Hills — bottom-aligned to ground
+  const hillH = T;
+  const hillY = GROUND_Y - hillH + 30;
+  tileParallaxRow(ctx, sprites.bgHills, camera.x * 0.2, hillY, T, hillH);
 
-  // ── Layer 3 (near, parallax 0.5): Cloud layer across top ──────────────────
-  const nearOff = camera.x * 0.5;
-  const nearStartX = -((nearOff % TILE_SIZE) + TILE_SIZE) % TILE_SIZE;
-  for (let tx = nearStartX; tx < CANVAS_WIDTH; tx += TILE_SIZE) {
-    ctx.drawImage(sprites.bgClouds, tx, 0, TILE_SIZE, TILE_SIZE);
-  }
+  // Layer 3 (parallax 0.4): Clouds — drawn on top of sky, upper portion only
+  // Only draw in the top 256px; the cloud sprite has transparency at top
+  // and white clouds at bottom, so it layers nicely over the sky
+  ctx.globalAlpha = 0.85;
+  tileParallaxRow(ctx, sprites.bgClouds, camera.x * 0.4, -20, T, T);
+  ctx.globalAlpha = 1;
 }
 
 function drawBackgroundProcedural(ctx: CanvasRenderingContext2D, camera: Camera): void {
@@ -224,18 +229,17 @@ function drawGroundSprites(
   sprites: SpriteAtlas
 ): void {
   const TILE = 64;
-  // Parallax offset so tiles scroll with the world
-  const offsetX = Math.floor(camera.x) % TILE;
+  // Ground scrolls 1:1 with the camera (no parallax — it's part of the world)
+  const startX = -(((Math.floor(camera.x) % TILE) + TILE) % TILE);
 
-  // Top grass row — one tile tall, aligned to ground
-  for (let tx = -TILE + (-offsetX % TILE + TILE) % TILE; tx < CANVAS_WIDTH + TILE; tx += TILE) {
+  // Top grass row
+  for (let tx = startX; tx < CANVAS_WIDTH + TILE; tx += TILE) {
     ctx.drawImage(sprites.grassTop, tx, GROUND_Y, TILE, TILE);
   }
 
-  // Dirt fill below grass top row
-  const dirtStartY = GROUND_Y + TILE;
-  for (let ty = dirtStartY; ty < GROUND_Y + GROUND_HEIGHT + TILE; ty += TILE) {
-    for (let tx = -TILE + (-offsetX % TILE + TILE) % TILE; tx < CANVAS_WIDTH + TILE; tx += TILE) {
+  // Dirt fill below (just needs to cover GROUND_HEIGHT below the grass)
+  for (let tx = startX; tx < CANVAS_WIDTH + TILE; tx += TILE) {
+    for (let ty = GROUND_Y + TILE; ty < GROUND_Y + GROUND_HEIGHT + TILE; ty += TILE) {
       ctx.drawImage(sprites.dirtCenter, tx, ty, TILE, TILE);
     }
   }
