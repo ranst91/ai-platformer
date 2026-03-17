@@ -3,24 +3,50 @@
 import { useAgent } from "@copilotkit/react-core/v2";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GameCanvas, GameCanvasHandle } from "./GameCanvas";
-import { HUD } from "./HUD";
-import { DMBar } from "./DMBar";
-import { CommandButtons } from "./CommandButtons";
 import { GameEventCallback } from "@/lib/game/engine";
 import { AgentGameState } from "@/lib/game/types";
+import { HUD_STRIP1_H, HUD_STRIP2_H } from "@/lib/game/renderer";
+import { CANVAS_WIDTH } from "@/lib/game/constants";
+
+// ── Command button layout (mirrors renderer.ts logic) ────────────────────────
+const CMD_BTN_H = 20;
+const CMD_BTN_PAD_X = 10;
+const CMD_BTN_GAP = 6;
+const CMD_BTN_MAX = 4;
+// Approximate char width for monospace bold 11px — used for hit-testing
+const MONO_CHAR_W = 7.2;
+
+function getCommandButtonHitRects(
+  suggestions: Array<{ label: string; command: string }>
+): Array<{ x: number; y: number; w: number; h: number; command: string; label: string }> {
+  const items = suggestions.slice(0, CMD_BTN_MAX);
+  if (items.length === 0) return [];
+
+  const PAD = 8;
+  const btnY = HUD_STRIP1_H + (HUD_STRIP2_H - CMD_BTN_H) / 2;
+
+  // Approximate widths the same way renderer does
+  // Width = keycap(14) + gap(4) + label text + padding(14)
+  const widths = items.map((s) => 14 + 4 + s.label.length * MONO_CHAR_W + 14);
+  const totalBtnW =
+    widths.reduce((a, b) => a + b, 0) + CMD_BTN_GAP * (items.length - 1);
+
+  let bx = CANVAS_WIDTH - PAD - totalBtnW;
+  return items.map((s, i) => {
+    const rect = { x: bx, y: btnY, w: widths[i], h: CMD_BTN_H, command: s.command, label: s.label };
+    bx += widths[i] + CMD_BTN_GAP;
+    return rect;
+  });
+}
 
 export function GameWrapper() {
   const { agent } = useAgent();
   const gameRef = useRef<GameCanvasHandle>(null);
-  const [score, setScore] = useState(0);
-  const [coins, setCoins] = useState(0);
-  const [lives, setLives] = useState(3);
   const [gamePhase, setGamePhase] = useState<"menu" | "loading" | "playing" | "dead" | "game_over">("menu");
 
   const agentState = agent.state as AgentGameState | undefined;
 
   // --- Sync agent state → game engine ---
-  // When chunks arrive, push to engine. Start playing once first chunks arrive.
   useEffect(() => {
     if (agentState?.level_chunks?.length) {
       gameRef.current?.engine?.updateLevelChunks(agentState.level_chunks);
@@ -30,14 +56,29 @@ export function GameWrapper() {
   useEffect(() => {
     if (agentState?.lives !== undefined) {
       gameRef.current?.engine?.setLives(agentState.lives);
-      setLives(agentState.lives);
     }
   }, [agentState?.lives]);
 
+  // Sync difficulty to engine
+  useEffect(() => {
+    if (agentState?.difficulty !== undefined) {
+      gameRef.current?.engine?.setDifficulty(agentState.difficulty);
+    }
+  }, [agentState?.difficulty]);
+
+  // Sync DM message to engine
+  useEffect(() => {
+    if (agentState?.dm_message) {
+      gameRef.current?.engine?.setDMMessage(agentState.dm_message);
+    }
+  }, [agentState?.dm_message]);
+
+  // Sync suggestions to engine (shown as canvas command buttons in strip 2)
+  useEffect(() => {
+    gameRef.current?.engine?.setSuggestions(agentState?.suggestions || []);
+  }, [agentState?.suggestions]);
+
   // --- Send messages to agent ---
-  // Guard against "Thread already running" — if the agent is busy,
-  // skip the call. The engine's requestingChunks flag self-corrects
-  // on the next frame when the current run completes.
   const sendToAgent = useCallback(
     (message: string) => {
       if (agent.isRunning) return;
@@ -53,18 +94,28 @@ export function GameWrapper() {
 
   // --- Start game ---
   const startGame = useCallback(() => {
-    // Start playing IMMEDIATELY with hardcoded starter chunks (in engine)
-    gameRef.current?.engine?.startPlaying();
-    setGamePhase("playing");
-    // Ask the AI to generate more chunks in the background — they'll
-    // arrive and extend the world while the player is already running
+    setGamePhase("loading");
+    gameRef.current?.engine?.setLoading(true);
     sendToAgent(
-      "Start a new game! Use append_chunks with 4 chunks (chunk_index 2-5). " +
-      "Set difficulty to 0.4. Design varied platform layouts — " +
+      "Start a new game! Use reset_game with 6 chunks (chunk_index 0-5). " +
+      "Set difficulty to 0.4, lives to 3. Design varied platform layouts — " +
       "mix heights, add gaps to jump over, make it interesting! " +
       "Welcome the player with a snarky dm_message and include suggestion buttons."
     );
   }, [sendToAgent]);
+
+  // When AI chunks arrive during loading, start playing
+  useEffect(() => {
+    if (gamePhase === "loading" && agentState?.level_chunks?.length) {
+      const engine = gameRef.current?.engine;
+      if (engine) {
+        engine.setLoading(false);
+        engine.setDMMessage(agentState?.dm_message || "Let's go!");
+        engine.startPlaying();
+      }
+      setGamePhase("playing");
+    }
+  }, [gamePhase, agentState?.level_chunks]);
 
   // --- Request more chunks ---
   const requestChunks = useCallback(
@@ -111,66 +162,90 @@ export function GameWrapper() {
     [sendToAgent],
   );
 
-  // --- Handle commands from buttons ---
+  // --- Handle commands from canvas buttons ---
   const handleCommand = useCallback(
-    (command: string) => {
+    (command: string, label?: string, buttonIndex?: number) => {
+      // Visual feedback: flash the pressed button
+      if (buttonIndex !== undefined) {
+        gameRef.current?.engine?.pressButton(buttonIndex);
+      }
+      // DM timeline feedback
+      gameRef.current?.engine?.setDMMessage(label || command, "you");
       sendToAgent(
-        `Player command: "${command}". React — adjust difficulty if needed, ` +
+        `Player command: "${label || command}". React — adjust difficulty if needed, ` +
         `update dm_message, provide new suggestions. Use append_chunks with 2 chunks.`
       );
     },
     [sendToAgent],
   );
 
-  // --- Score update ---
-  const handleScoreUpdate = useCallback((newScore: number, newCoins: number) => {
-    setScore(newScore);
-    setCoins(newCoins);
-  }, []);
-
   // --- Engine callbacks ---
   const callbacks: GameEventCallback = useMemo(
     () => ({
       onNeedChunks: requestChunks,
       onPlayerDied: handlePlayerDied,
-      onScoreUpdate: handleScoreUpdate,
     }),
-    [requestChunks, handlePlayerDied, handleScoreUpdate],
+    [requestChunks, handlePlayerDied],
+  );
+
+  // --- Keyboard shortcuts: 1-4 for commands, Enter for start ---
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Enter/Space starts the game from menu/game_over
+      if ((e.key === "Enter") && (gamePhase === "menu" || gamePhase === "game_over")) {
+        e.preventDefault();
+        startGame();
+        return;
+      }
+      // Keys 1-4 trigger command buttons during play
+      if (gamePhase === "playing" && !agent.isRunning) {
+        const suggestions = agentState?.suggestions || [];
+        const idx = parseInt(e.key, 10) - 1; // "1" → 0, "2" → 1, etc.
+        if (idx >= 0 && idx < suggestions.length) {
+          handleCommand(suggestions[idx].command, suggestions[idx].label, idx);
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [gamePhase, startGame, agentState?.suggestions, agent.isRunning, handleCommand]);
+
+  // --- Canvas click: detect START button + strip-2 command buttons ---
+  const handleCanvasClick = useCallback(
+    (cx: number, cy: number) => {
+      // START / PLAY AGAIN button (menu + game_over)
+      if (gamePhase === "menu" || gamePhase === "game_over") {
+        const btnW = 180;
+        const btnH = 36;
+        const btnX = 400 - btnW / 2; // CANVAS_WIDTH/2
+        // Menu button at cy+40=340, Game Over button at cy+60=360
+        const btnY = gamePhase === "menu" ? 340 : 360;
+        if (cx >= btnX && cx <= btnX + btnW && cy >= btnY && cy <= btnY + btnH) {
+          startGame();
+          return;
+        }
+      }
+
+      // Strip-2 command buttons (playing + dead)
+      if (gamePhase === "playing" || gamePhase === "dead") {
+        if (agent.isRunning) return; // ignore while AI is busy
+        const suggestions = agentState?.suggestions || [];
+        const rects = getCommandButtonHitRects(suggestions);
+        for (let ri = 0; ri < rects.length; ri++) {
+          const rect = rects[ri];
+          if (cx >= rect.x && cx <= rect.x + rect.w && cy >= rect.y && cy <= rect.y + rect.h) {
+            handleCommand(rect.command, rect.label, ri);
+            return;
+          }
+        }
+      }
+    },
+    [gamePhase, startGame, agentState?.suggestions, agent.isRunning, handleCommand],
   );
 
   return (
     <div className="relative flex flex-col items-center justify-center min-h-screen bg-gray-950">
-      <DMBar message={agentState?.dm_message || ""} />
-      <GameCanvas ref={gameRef} callbacks={callbacks} />
-      <HUD score={score} lives={lives} coins={coins} difficulty={agentState?.difficulty || 0} />
-
-      {gamePhase === "playing" && (
-        <CommandButtons
-          suggestions={agentState?.suggestions || []}
-          onCommand={handleCommand}
-          disabled={agent.isRunning}
-        />
-      )}
-
-      {(gamePhase === "menu" || gamePhase === "game_over") && (
-        <button
-          onClick={startGame}
-          disabled={agent.isRunning}
-          className="absolute bottom-20 px-8 py-3 bg-purple-600 hover:bg-purple-500 rounded-lg
-                     font-mono text-lg text-white font-bold transition-all duration-200
-                     active:scale-95 shadow-lg shadow-purple-500/30
-                     disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {gamePhase === "menu" ? "START GAME" : "PLAY AGAIN"}
-        </button>
-      )}
-
-
-      {agent.isRunning && gamePhase === "playing" && (
-        <div className="absolute top-14 right-[calc(50%-390px)] px-2 py-1 bg-purple-600/60 rounded text-xs text-white font-mono animate-pulse">
-          AI generating...
-        </div>
-      )}
+      <GameCanvas ref={gameRef} callbacks={callbacks} onCanvasClick={handleCanvasClick} />
     </div>
   );
 }

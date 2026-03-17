@@ -10,10 +10,11 @@ export interface GameCanvasHandle {
 
 interface GameCanvasProps {
   callbacks: GameEventCallback;
+  onCanvasClick?: (canvasX: number, canvasY: number) => void;
 }
 
 export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
-  function GameCanvas({ callbacks }, ref) {
+  function GameCanvas({ callbacks, onCanvasClick }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const engineRef = useRef<GameEngine | null>(null);
 
@@ -52,8 +53,17 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
     return (
       <canvas
         ref={canvasRef}
-        className="block mx-auto border-2 border-gray-700 rounded-lg shadow-2xl"
+        className="block mx-auto border-2 border-gray-700 rounded-lg shadow-2xl cursor-pointer"
         style={{ imageRendering: "pixelated" }}
+        onClick={(e) => {
+          if (!onCanvasClick || !canvasRef.current) return;
+          const rect = canvasRef.current.getBoundingClientRect();
+          const scaleX = canvasRef.current.width / rect.width;
+          const scaleY = canvasRef.current.height / rect.height;
+          const x = (e.clientX - rect.left) * scaleX;
+          const y = (e.clientY - rect.top) * scaleY;
+          onCanvasClick(x, y);
+        }}
       />
     );
   },

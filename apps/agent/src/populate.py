@@ -65,10 +65,10 @@ def populate_chunk(
     enemies: list[dict] = []
     enemy_count = max(2, int(2 + difficulty * 3))  # 2 at easy, 5 at hard
 
-    # Eligible platforms for enemies (wide enough to walk on)
-    enemy_platforms = [p for p in platforms if p["width"] >= 100]
+    # Eligible platforms for enemies (wide enough, non-mystery)
+    enemy_platforms = [p for p in platforms if p["width"] >= 100 and p.get("type") != "mystery"]
     if not enemy_platforms:
-        enemy_platforms = platforms[:2]
+        enemy_platforms = [p for p in platforms if p.get("type") != "mystery"][:2]
 
     for i in range(enemy_count):
         plat = enemy_platforms[i % len(enemy_platforms)]
@@ -83,25 +83,31 @@ def populate_chunk(
 
         if etype == "flyer":
             # Flyers bob in the air above the platform
-            ex = plat["x"] + rng.uniform(0.2, 0.8) * plat["width"]
+            ex = plat["x"] + rng.uniform(0.3, 0.8) * plat["width"]
             ey = plat["y"] - rng.randint(50, 80)
         else:
             # Walkers and shooters sit on top of the platform
-            ex = plat["x"] + rng.uniform(0.2, 0.8) * plat["width"]
+            ex = plat["x"] + rng.uniform(0.3, 0.8) * plat["width"]
             ey = plat["y"] - 30  # Enemy is ~30px tall
+
+        # Don't place enemies in the player spawn zone (first 250px of chunk 0)
+        if chunk_index == 0 and ex < 250:
+            ex = plat["x"] + 0.7 * plat["width"]
 
         enemies.append({"x": round(ex), "y": round(ey), "type": etype})
 
-    # ── Validate enemy positions — remove any that aren't on a platform ──
+    # ── Validate enemy positions — remove any that aren't on a real platform ──
+    # Exclude mystery blocks — they're too small for walkers
+    real_platforms = [p for p in platforms if p["type"] != "mystery"]
     validated_enemies = []
     for enemy in enemies:
         if enemy["type"] == "flyer":
             # Flyers float, they're always valid
             validated_enemies.append(enemy)
         else:
-            # Walkers/shooters must be on a platform surface
+            # Walkers/shooters must be on a real (non-mystery) platform surface
             on_platform = False
-            for p in platforms:
+            for p in real_platforms:
                 if (p["x"] <= enemy["x"] <= p["x"] + p["width"] and
                         abs(enemy["y"] - (p["y"] - 30)) < 10):
                     on_platform = True

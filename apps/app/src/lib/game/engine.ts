@@ -16,7 +16,7 @@ import { updatePlayer } from "./physics";
 import { checkEnemyCollision, checkCoinCollision, platformWorldX } from "./physics";
 import { createCamera, updateCamera } from "./camera";
 import type { Camera } from "./camera";
-import { clearCanvas, drawBackground, drawGround, drawChunks, drawPlayer } from "./renderer";
+import { clearCanvas, drawBackground, drawGround, drawChunks, drawPlayer, drawHUD } from "./renderer";
 import type { SpriteAtlas } from "./sprites";
 
 // ─── Callback type ────────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ function initialPlayer(): PlayerState {
   };
 }
 
-/** Hardcoded starter chunks so the game is playable instantly while the AI loads */
+/** Hardcoded starter chunks so the game is playable instantly while the AI loads. */
 function starterChunks(): LevelChunk[] {
   return [
     {
@@ -53,7 +53,7 @@ function starterChunks(): LevelChunk[] {
         { x: 200, y: 340, width: 55, height: 30, type: "mystery" },
       ],
       enemies: [
-        { x: 150, y: 400, type: "walker", alive: true, direction: 1, moveOffset: 0 },
+        { x: 250, y: 400, type: "walker", alive: true, direction: 1, moveOffset: 0 },
         { x: 500, y: 370, type: "walker", alive: true, direction: -1, moveOffset: 0 },
         { x: 800, y: 330, type: "flyer", alive: true, direction: 1, moveOffset: 0 },
       ],
@@ -120,6 +120,13 @@ export class GameEngine {
   private requestingChunksTime: number = 0; // when we started requesting
   private lastScore: number = -1;
   private sprites: SpriteAtlas | undefined = undefined;
+  private difficulty: number = 0.4;
+  private dmMessages: Array<{ text: string; from: "dm" | "you"; time: number }> = [];
+  private dmMessage: string = "";
+  private dmMessageTime: number = 0;
+  private suggestions: Array<{ label: string; command: string }> = [];
+  private pressedButtonIndex: number = -1;
+  private pressedButtonTime: number = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -234,12 +241,43 @@ export class GameEngine {
       return { ...incoming, enemies, coins, platforms };
     });
 
-    this.state.chunks = merged;
+    // Keep existing chunks that the agent didn't send (e.g., starter chunks).
+    // This prevents the wipe when AI responds with only its new chunks.
+    const incomingIndices = new Set(chunks.map((c) => c.chunk_index));
+    const kept = this.state.chunks.filter((c) => !incomingIndices.has(c.chunk_index));
+    this.state.chunks = [...kept, ...merged].sort((a, b) => a.chunk_index - b.chunk_index);
     this.requestingChunks = false;
   }
 
   setLives(lives: number): void {
     this.state.lives = lives;
+  }
+
+  setDifficulty(d: number): void {
+    this.difficulty = d;
+  }
+
+  setDMMessage(msg: string, from: "dm" | "you" = "dm"): void {
+    this.dmMessage = msg;
+    this.dmMessageTime = this.time;
+    // Add to timeline, cap at 4 messages
+    this.dmMessages.push({ text: msg, from, time: this.time });
+    if (this.dmMessages.length > 4) this.dmMessages.shift();
+  }
+
+  setSuggestions(suggestions: Array<{ label: string; command: string }>): void {
+    this.suggestions = suggestions;
+  }
+
+  /** Flash a button as "pressed" for visual feedback */
+  pressButton(index: number): void {
+    this.pressedButtonIndex = index;
+    this.pressedButtonTime = this.time;
+  }
+
+  private _loading: boolean = false;
+  setLoading(loading: boolean): void {
+    this._loading = loading;
   }
 
   getState(): GameState {
@@ -306,18 +344,40 @@ export class GameEngine {
     updateCamera(this.camera, player.x, dt);
     this.state.cameraX = this.camera.x;
 
-    // 5. Update enemies
+    // 5. Update enemies — walkers patrol within their host platform bounds
     for (const chunk of chunks) {
       for (const enemy of chunk.enemies) {
         if (!enemy.alive) continue;
-        const BASE_SPEED = enemy.type === "flyer" ? 60 : 80;
 
-        if (enemy.type === "walker" || enemy.type === "flyer") {
-          // Initialize direction if missing
+        if (enemy.type === "walker") {
+          const SPEED = 80;
           if (!enemy.direction) enemy.direction = 1;
-          enemy.moveOffset = (enemy.moveOffset ?? 0) + enemy.direction * BASE_SPEED * dt;
+          enemy.moveOffset = (enemy.moveOffset ?? 0) + enemy.direction * SPEED * dt;
 
-          // Reverse at ±60 px range
+          // Find the platform this walker sits on and clamp to its edges
+          let minOff = -40;
+          let maxOff = 40;
+          for (const plat of chunk.platforms) {
+            if (Math.abs(enemy.y - (plat.y - 30)) < 10 &&
+                enemy.x >= plat.x && enemy.x <= plat.x + plat.width) {
+              // Clamp so enemy.x + moveOffset stays within [plat.x+10, plat.x+width-10]
+              minOff = plat.x + 10 - enemy.x;
+              maxOff = plat.x + plat.width - 10 - enemy.x;
+              break;
+            }
+          }
+
+          if ((enemy.moveOffset ?? 0) > maxOff) {
+            enemy.moveOffset = maxOff;
+            enemy.direction = -1;
+          } else if ((enemy.moveOffset ?? 0) < minOff) {
+            enemy.moveOffset = minOff;
+            enemy.direction = 1;
+          }
+        } else if (enemy.type === "flyer") {
+          const SPEED = 60;
+          if (!enemy.direction) enemy.direction = 1;
+          enemy.moveOffset = (enemy.moveOffset ?? 0) + enemy.direction * SPEED * dt;
           const RANGE = 60;
           if ((enemy.moveOffset ?? 0) > RANGE) {
             enemy.moveOffset = RANGE;
@@ -327,7 +387,7 @@ export class GameEngine {
             enemy.direction = 1;
           }
         }
-        // Flyers also bob vertically — handled in renderer via time
+        // Shooters don't move. Flyers bob vertically in renderer via time.
       }
     }
 
@@ -449,8 +509,11 @@ export class GameEngine {
   // ── Chunk generation ──────────────────────────────────────────────────────────
 
   private checkChunkGeneration(): void {
+    // Don't request more chunks in the first 5 seconds — let the player
+    // actually move before triggering AI generation
+    if (this.time < 5) return;
+
     // If we've been waiting for chunks for more than 15 seconds, reset the flag
-    // so we can request again (the previous request may have been dropped)
     if (this.requestingChunks && this.time - this.requestingChunksTime > 15) {
       this.requestingChunks = false;
     }
@@ -501,7 +564,7 @@ export class GameEngine {
 
     switch (gamePhase) {
       case "menu":
-        this.drawMenuOverlay();
+        if (!this._loading) this.drawMenuOverlay();
         break;
       case "dead":
         this.drawDeadOverlay();
@@ -512,77 +575,99 @@ export class GameEngine {
       default:
         break;
     }
+
+    // Loading overlay (shown while waiting for AI's first response)
+    if (this._loading) {
+      this.drawLoadingOverlay();
+    }
+
+    // ── Canvas HUD (always on top, unaffected by camera) ────────────────────
+    if (gamePhase === "playing" || gamePhase === "dead") {
+      drawHUD(ctx, {
+        lives,
+        coins,
+        score,
+        difficulty: this.difficulty,
+        dmMessage: this.dmMessage,
+        dmMessageTime: this.dmMessageTime,
+        dmMessages: this.dmMessages,
+        aiGenerating: this.requestingChunks,
+        suggestions: this.suggestions,
+        pressedButtonIndex: this.pressedButtonIndex,
+        pressedButtonTime: this.pressedButtonTime,
+      }, sprites, time);
+    }
   }
 
   // ── Overlay helpers ───────────────────────────────────────────────────────────
 
   private drawMenuOverlay(): void {
-    const { ctx, time } = this;
+    const { ctx, time, sprites } = this;
     const cx = CANVAS_WIDTH / 2;
     const cy = CANVAS_HEIGHT / 2;
 
-    // Gradient dark overlay
-    const overlayGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    overlayGrad.addColorStop(0, "rgba(0, 0, 60, 0.55)");
-    overlayGrad.addColorStop(1, "rgba(0, 0, 0, 0.7)");
-    ctx.fillStyle = overlayGrad;
+    // Dark overlay — slightly transparent so the game world peeks through
+    ctx.fillStyle = "rgba(0, 0, 20, 0.65)";
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Floating decoration coins
-    ctx.save();
-    const floatCoins = [
-      { ox: -160, oy: -90 },
-      { ox:  160, oy: -90 },
-      { ox: -220, oy:  20 },
-      { ox:  220, oy:  20 },
-    ];
-    for (const fc of floatCoins) {
-      const fcx = cx + fc.ox;
-      const fcy = cy + fc.oy + Math.sin(time * 2 + fc.ox) * 6;
-      ctx.globalAlpha = 0.7;
-      ctx.fillStyle = "#FFC107";
-      ctx.beginPath();
-      ctx.arc(fcx, fcy, 10, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#FFE082";
-      ctx.beginPath();
-      ctx.arc(fcx - 3, fcy - 3, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
+    // ── Character mascot ──────────────────────────────────────────────────
+    if (sprites?.loaded) {
+      const mascotSize = 80;
+      const bobY = Math.sin(time * 2) * 6;
+      ctx.drawImage(
+        sprites.playerIdle,
+        cx - mascotSize / 2,
+        cy - 150 + bobY,
+        mascotSize,
+        mascotSize,
+      );
     }
-    ctx.restore();
 
-    // Title — drop shadow + outline
+    // ── Title ─────────────────────────────────────────────────────────────
     ctx.textAlign = "center";
-    ctx.font = "bold 58px sans-serif";
+    ctx.textBaseline = "middle";
 
     // Shadow
-    ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.fillText("INFINITE RUNNER", cx + 4, cy - 42 + 4);
+    ctx.font = "bold 44px monospace";
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillText("AI PLATFORMER", cx + 3, cy - 40 + 3);
 
-    // Outline
-    ctx.strokeStyle = "#B8860B";
-    ctx.lineWidth = 4;
-    ctx.strokeText("INFINITE RUNNER", cx, cy - 42);
-
-    // Fill
-    ctx.fillStyle = "#FFD700";
-    ctx.fillText("INFINITE RUNNER", cx, cy - 42);
-
-    // Subtitle with pulsing opacity
-    const pulse = 0.6 + Math.sin(time * 3) * 0.4;
-    ctx.globalAlpha = pulse;
+    // Main title
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "26px sans-serif";
-    ctx.fillText("Press START to play", cx, cy + 20);
-    ctx.globalAlpha = 1;
+    ctx.fillText("AI PLATFORMER", cx, cy - 40);
 
-    // Decorative star row
-    ctx.fillStyle = "#FFD700";
-    ctx.font = "18px sans-serif";
-    ctx.fillText("★  ★  ★  ★  ★", cx, cy + 56);
+    // Subtitle
+    ctx.font = "bold 14px monospace";
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.fillText("Powered by CopilotKit", cx, cy + 5);
+
+    // ── START button (same 3D shadow style as command buttons, but green) ─
+    const btnW = 180;
+    const btnH = 36;
+    const btnX = cx - btnW / 2;
+    const btnY = cy + 40;
+    const btnR = 6;
+    const shadowOff = 3;
+
+    // 3D shadow — dark green, offset below
+    ctx.fillStyle = "#14532d";
+    ctx.beginPath();
+    ctx.roundRect(btnX, btnY + shadowOff, btnW, btnH, btnR);
+    ctx.fill();
+
+    // Button body
+    ctx.fillStyle = "#22c55e";
+    ctx.beginPath();
+    ctx.roundRect(btnX, btnY, btnW, btnH, btnR);
+    ctx.fill();
+
+    // Text
+    ctx.font = "bold 16px monospace";
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillText("START GAME", cx, btnY + btnH / 2 + 1);
 
     ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
   }
 
   private drawDeadOverlay(): void {
@@ -602,7 +687,7 @@ export class GameEngine {
     const pulse = 0.85 + Math.sin(time * 4) * 0.15;
     const fontSize = Math.round(64 * pulse);
     ctx.textAlign = "center";
-    ctx.font = `bold ${fontSize}px sans-serif`;
+    ctx.font = `bold ${fontSize}px monospace`;
 
     // Shadow
     ctx.fillStyle = "rgba(0,0,0,0.7)";
@@ -621,7 +706,7 @@ export class GameEngine {
     const subPulse = 0.5 + Math.sin(time * 2.5) * 0.5;
     ctx.globalAlpha = subPulse;
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "22px sans-serif";
+    ctx.font = "16px monospace";
     ctx.fillText("Respawning…", cx, cy + 44);
     ctx.globalAlpha = 1;
 
@@ -629,78 +714,117 @@ export class GameEngine {
   }
 
   private drawGameOverOverlay(score: number, coins: number, deaths: number): void {
-    const { ctx, time } = this;
+    const { ctx, time, sprites } = this;
     const cx = CANVAS_WIDTH / 2;
     const cy = CANVAS_HEIGHT / 2;
 
-    // Dark gradient overlay
-    const overlayGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    overlayGrad.addColorStop(0, "rgba(20, 0, 0, 0.85)");
-    overlayGrad.addColorStop(1, "rgba(0, 0, 0, 0.92)");
-    ctx.fillStyle = overlayGrad;
+    // Dark overlay — same style as menu
+    ctx.fillStyle = "rgba(0, 0, 20, 0.75)";
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
 
-    // "GAME OVER" with glow
-    ctx.font = "bold 72px sans-serif";
-
-    // Glow layers
-    ctx.globalAlpha = 0.2 + Math.sin(time * 2) * 0.08;
-    ctx.fillStyle = "#FF4444";
-    for (const blur of [18, 12, 6]) {
-      ctx.save();
-      ctx.filter = `blur(${blur}px)`;
-      ctx.fillText("GAME OVER", cx, cy - 80);
-      ctx.restore();
+    // Sad character mascot
+    if (sprites?.loaded) {
+      const mascotSize = 64;
+      ctx.globalAlpha = 0.8;
+      ctx.drawImage(
+        sprites.playerHit,
+        cx - mascotSize / 2,
+        cy - 140,
+        mascotSize,
+        mascotSize,
+      );
+      ctx.globalAlpha = 1;
     }
-    ctx.globalAlpha = 1;
-    ctx.filter = "none";
 
-    // Shadow
-    ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.fillText("GAME OVER", cx + 4, cy - 80 + 4);
+    // "GAME OVER" title — same style as menu title
+    ctx.font = "bold 44px monospace";
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillText("GAME OVER", cx + 3, cy - 55 + 3);
+    ctx.fillStyle = "#FF6B6B";
+    ctx.fillText("GAME OVER", cx, cy - 55);
 
-    // Outline
-    ctx.strokeStyle = "#7F0000";
-    ctx.lineWidth = 5;
-    ctx.strokeText("GAME OVER", cx, cy - 80);
-
-    // Fill
-    ctx.fillStyle = "#FF4444";
-    ctx.fillText("GAME OVER", cx, cy - 80);
-
-    // Stats panel background
-    const panelW = 320;
-    const panelH = 110;
-    const panelX = cx - panelW / 2;
-    const panelY = cy - 30;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
-    ctx.strokeStyle = "rgba(255, 68, 68, 0.5)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(panelX, panelY, panelW, panelH, 10);
-    ctx.fill();
-    ctx.stroke();
-
-    // Stats
+    // Stats — clean monospace layout
+    ctx.font = "bold 16px monospace";
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 26px sans-serif";
-    ctx.fillText(`Score: ${score}`, cx, panelY + 36);
-    ctx.font = "22px sans-serif";
-    ctx.fillStyle = "#FFD700";
-    ctx.fillText(`Coins: ${coins}`, cx - 60, panelY + 72);
-    ctx.fillStyle = "#FF8A80";
-    ctx.fillText(`Deaths: ${deaths}`, cx + 60, panelY + 72);
+    ctx.fillText(`Score: ${score}`, cx, cy + 5);
 
-    // "Press START to play again" with pulsing animation
-    const pulse = 0.55 + Math.sin(time * 3) * 0.45;
-    ctx.globalAlpha = pulse;
-    ctx.fillStyle = "#FFD700";
-    ctx.font = "20px sans-serif";
-    ctx.fillText("Talk to the AI to play again", cx, cy + 108);
-    ctx.globalAlpha = 1;
+    ctx.font = "13px monospace";
+    ctx.fillStyle = "#C4A882";
+    ctx.fillText(`Coins: ${coins}     Deaths: ${deaths}`, cx, cy + 30);
+
+    // PLAY AGAIN button — same green 3D style as start button
+    const btnW = 180;
+    const btnH = 36;
+    const btnX = cx - btnW / 2;
+    const btnY = cy + 60;
+    const btnR = 6;
+
+    // 3D shadow
+    ctx.fillStyle = "#14532d";
+    ctx.beginPath();
+    ctx.roundRect(btnX, btnY + 3, btnW, btnH, btnR);
+    ctx.fill();
+
+    // Button body
+    ctx.fillStyle = "#22c55e";
+    ctx.beginPath();
+    ctx.roundRect(btnX, btnY, btnW, btnH, btnR);
+    ctx.fill();
+
+    // Button text
+    ctx.font = "bold 16px monospace";
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillText("PLAY AGAIN", cx, btnY + btnH / 2 + 1);
+
+    // Hint
+    ctx.font = "11px monospace";
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.fillText("or press Enter", cx, btnY + btnH + 18);
 
     ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+  }
+
+  private drawLoadingOverlay(): void {
+    const { ctx, time, sprites } = this;
+    const cx = CANVAS_WIDTH / 2;
+    const cy = CANVAS_HEIGHT / 2;
+
+    // Dark overlay
+    ctx.fillStyle = "rgba(0, 0, 20, 0.75)";
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Bouncing character mascot
+    if (sprites?.loaded) {
+      const mascotSize = 64;
+      const bounceY = Math.abs(Math.sin(time * 3)) * 20;
+      ctx.drawImage(
+        sprites.playerJump,
+        cx - mascotSize / 2,
+        cy - 60 - bounceY,
+        mascotSize,
+        mascotSize,
+      );
+    }
+
+    // "Loading" text with animated dots
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold 24px monospace";
+    ctx.fillStyle = "#FFFFFF";
+    const dotCount = Math.floor(time * 2) % 4;
+    const dots = ".".repeat(dotCount);
+    ctx.fillText("Loading" + dots, cx, cy + 30);
+
+    // Subtle subtitle
+    ctx.font = "13px monospace";
+    ctx.fillStyle = "rgba(255,255,255,0.4)";
+    ctx.fillText("The Dungeon Master is building your world", cx, cy + 60);
+
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
   }
 }

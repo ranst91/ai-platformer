@@ -1332,3 +1332,392 @@ export function drawChunks(
     }
   }
 }
+
+// ─── HUD ──────────────────────────────────────────────────────────────────────
+
+export interface HUDState {
+  lives: number;
+  coins: number;
+  score: number;
+  difficulty: number;
+  dmMessage: string;
+  dmMessageTime: number;
+  dmMessages: Array<{ text: string; from: "dm" | "you"; time: number }>;
+  aiGenerating: boolean;
+  suggestions: Array<{ label: string; command: string }>;
+  pressedButtonIndex: number;
+  pressedButtonTime: number;
+}
+
+// Strip layout constants (exported so GameWrapper click handler can use them)
+export const HUD_STRIP1_H = 34;
+export const HUD_STRIP2_H = 28;
+export const HUD_TOTAL_H = HUD_STRIP1_H + HUD_STRIP2_H;
+
+// Command button constants
+const CMD_BTN_H = 20;
+const CMD_BTN_GAP = 6;
+const CMD_BTN_MAX = 4;
+
+/** Returns the hit-rects for the command buttons in strip 2.
+ *  The rects are in canvas coordinates. */
+export function getCommandButtonRects(
+  suggestionCount: number
+): Array<{ x: number; y: number; w: number; h: number }> {
+  const count = Math.min(suggestionCount, CMD_BTN_MAX);
+  if (count === 0) return [];
+
+  // Measure approximate widths: assume ~7px per char + 2*padding
+  // We'll use a fixed estimated width and pack them right-aligned
+  // We keep them right-aligned on strip 2 starting from the right edge.
+  // For hit testing we need the same layout the renderer uses, so we
+  // replicate the layout logic (label width unknown here — use fixed estimate).
+  // The renderer draws them right-aligned. We store the same rects.
+
+  const BTN_ESTIMATED_W = 80; // fallback — renderer computes actual
+  const rightEdge = CANVAS_WIDTH - 8;
+  const stripY = HUD_STRIP1_H;
+  const btnY = stripY + (HUD_STRIP2_H - CMD_BTN_H) / 2;
+
+  const rects: Array<{ x: number; y: number; w: number; h: number }> = [];
+  let rx = rightEdge;
+  for (let i = count - 1; i >= 0; i--) {
+    const w = BTN_ESTIMATED_W;
+    rx -= w;
+    rects[i] = { x: rx, y: btnY, w, h: CMD_BTN_H };
+    rx -= CMD_BTN_GAP;
+  }
+  return rects;
+}
+
+/** Draw a number using Kenney digit sprites at the given position.
+ *  Returns the x position after the last digit drawn. */
+function drawDigits(
+  ctx: CanvasRenderingContext2D,
+  value: number,
+  x: number,
+  y: number,
+  digitSize: number,
+  digitSpacing: number,
+  sprites: SpriteAtlas
+): number {
+  const digits: HTMLImageElement[] = [
+    sprites.hudDigit0, sprites.hudDigit1, sprites.hudDigit2, sprites.hudDigit3,
+    sprites.hudDigit4, sprites.hudDigit5, sprites.hudDigit6, sprites.hudDigit7,
+    sprites.hudDigit8, sprites.hudDigit9,
+  ];
+  const str = String(Math.max(0, Math.floor(value)));
+  let cx = x;
+  for (const ch of str) {
+    const idx = parseInt(ch, 10);
+    ctx.drawImage(digits[idx], cx, y, digitSize, digitSize);
+    cx += digitSpacing;
+  }
+  return cx;
+}
+
+export function drawHUD(
+  ctx: CanvasRenderingContext2D,
+  state: HUDState,
+  sprites: SpriteAtlas | undefined,
+  time: number
+): void {
+  ctx.save();
+
+  // ── Layout constants ──────────────────────────────────────────────────────
+  const S1_H = HUD_STRIP1_H;   // 34 — stats bar
+  const S2_H = HUD_STRIP2_H;   // 28 — DM + commands bar
+  const PAD = 8;
+
+  // ── Strip 1 background ────────────────────────────────────────────────────
+  ctx.fillStyle = "rgba(0, 0, 0, 0.62)";
+  ctx.fillRect(0, 0, CANVAS_WIDTH, S1_H);
+
+  // Accent divider line at bottom of strip 1
+  ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+  ctx.fillRect(0, S1_H - 1, CANVAS_WIDTH, 1);
+
+  // ── Strip 2 background ────────────────────────────────────────────────────
+  ctx.fillStyle = "rgba(40, 30, 20, 0.72)";
+  ctx.fillRect(0, S1_H, CANVAS_WIDTH, S2_H);
+
+  // Accent divider at bottom of strip 2
+  ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
+  ctx.fillRect(0, S1_H + S2_H - 1, CANVAS_WIDTH, 1);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // STRIP 1 CONTENTS
+  // All items vertically centered on S1_H/2
+  // ─────────────────────────────────────────────────────────────────────────
+  const S1_CY = S1_H / 2; // vertical center of strip 1
+
+  const HEART_SIZE = 20;
+  const DIGIT_SIZE = 18;
+  const DIGIT_SPACING = 13;
+  const COIN_SIZE = 18;
+  const MULT_SIZE = 13;
+  const MAX_LIVES = 3;
+
+  // ── Hearts (left side) ───────────────────────────────────────────────────
+  let hx = PAD;
+  if (sprites?.loaded) {
+    for (let i = 0; i < MAX_LIVES; i++) {
+      const img = i < state.lives ? sprites.hudHeart : sprites.hudHeartEmpty;
+      ctx.drawImage(img, hx, Math.round(S1_CY - HEART_SIZE / 2), HEART_SIZE, HEART_SIZE);
+      hx += HEART_SIZE + 3;
+    }
+  } else {
+    ctx.font = "bold 16px monospace";
+    ctx.textBaseline = "middle";
+    for (let i = 0; i < MAX_LIVES; i++) {
+      ctx.fillStyle = i < state.lives ? "#FF4444" : "#555555";
+      ctx.fillText("♥", hx, S1_CY);
+      hx += 20;
+    }
+  }
+
+  // ── Coin + count (after hearts) ──────────────────────────────────────────
+  let coinX = hx + 12;
+  if (sprites?.loaded) {
+    ctx.drawImage(sprites.hudCoin, coinX, Math.round(S1_CY - COIN_SIZE / 2), COIN_SIZE, COIN_SIZE);
+    coinX += COIN_SIZE + 2;
+    ctx.drawImage(sprites.hudMultiply, coinX, Math.round(S1_CY - MULT_SIZE / 2), MULT_SIZE, MULT_SIZE);
+    coinX += MULT_SIZE + 2;
+    drawDigits(ctx, state.coins, coinX, Math.round(S1_CY - DIGIT_SIZE / 2), DIGIT_SIZE, DIGIT_SPACING, sprites);
+  } else {
+    ctx.font = "bold 12px monospace";
+    ctx.fillStyle = "#FFD700";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`\u{1FA99} x${state.coins}`, coinX, S1_CY);
+  }
+
+  // ── Score (centered in strip 1) ──────────────────────────────────────────
+  const scoreLabel = "Score:";
+  ctx.font = "bold 13px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+  ctx.textBaseline = "middle";
+  const scoreLabelW = ctx.measureText(scoreLabel).width;
+  const scoreStr = String(Math.max(0, Math.floor(state.score)));
+
+  let scoreBlockW: number;
+  let scoreValueX: number;
+  if (sprites?.loaded) {
+    scoreBlockW = scoreLabelW + 6 + scoreStr.length * DIGIT_SPACING;
+    scoreValueX = Math.round(CANVAS_WIDTH / 2 - scoreBlockW / 2) + scoreLabelW + 6;
+  } else {
+    ctx.font = "bold 13px monospace";
+    const scoreValW = ctx.measureText(scoreStr).width;
+    scoreBlockW = scoreLabelW + 6 + scoreValW;
+    scoreValueX = Math.round(CANVAS_WIDTH / 2 - scoreBlockW / 2) + scoreLabelW + 6;
+  }
+  const scoreLabelX = Math.round(CANVAS_WIDTH / 2 - scoreBlockW / 2);
+
+  ctx.font = "bold 13px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+  ctx.textBaseline = "middle";
+  ctx.fillText(scoreLabel, scoreLabelX, S1_CY);
+
+  if (sprites?.loaded) {
+    drawDigits(ctx, state.score, scoreValueX, Math.round(S1_CY - DIGIT_SIZE / 2), DIGIT_SIZE, DIGIT_SPACING, sprites);
+  } else {
+    ctx.font = "bold 13px monospace";
+    ctx.fillStyle = "#FFFFFF";
+    ctx.textBaseline = "middle";
+    ctx.fillText(scoreStr, scoreValueX, S1_CY);
+  }
+
+  // ── Difficulty label + bar (right side) ──────────────────────────────────
+  const DIFF_BAR_W = 60;
+  const DIFF_BAR_H = 7;
+  const diffLabelText = "Difficulty";
+  ctx.font = "bold 11px monospace";
+  const diffLabelW = ctx.measureText(diffLabelText).width;
+  const diffLabelX = CANVAS_WIDTH - PAD - DIFF_BAR_W - 5 - diffLabelW;
+  const diffBarX = diffLabelX + diffLabelW + 5;
+  const diffBarY = Math.round(S1_CY - DIFF_BAR_H / 2);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
+  ctx.textBaseline = "middle";
+  ctx.fillText(diffLabelText, diffLabelX, S1_CY);
+
+  // Track background
+  ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+  ctx.beginPath();
+  ctx.roundRect(diffBarX, diffBarY, DIFF_BAR_W, DIFF_BAR_H, 3);
+  ctx.fill();
+
+  // Filled portion — green → yellow → red gradient
+  const fillW = Math.round(Math.max(0, Math.min(1, state.difficulty)) * DIFF_BAR_W);
+  if (fillW > 0) {
+    const diffGrad = ctx.createLinearGradient(diffBarX, 0, diffBarX + DIFF_BAR_W, 0);
+    diffGrad.addColorStop(0, "#4CAF50");
+    diffGrad.addColorStop(0.5, "#FFC107");
+    diffGrad.addColorStop(1, "#F44336");
+    ctx.fillStyle = diffGrad;
+    ctx.beginPath();
+    ctx.roundRect(diffBarX, diffBarY, fillW, DIFF_BAR_H, 3);
+    ctx.fill();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // STRIP 2 CONTENTS
+  // ─────────────────────────────────────────────────────────────────────────
+  const S2_Y = S1_H;
+  const S2_CY = S2_Y + S2_H / 2;
+
+  // ── DM message timeline (left side) ──────────────────────────────────────
+  // Show the most recent message. If AI is generating, show that as the latest.
+  const DM_MAX_X = CANVAS_WIDTH / 2;
+  const generatingMsgs = [
+    "Cooking the next steps...",
+    "Building more world for you...",
+    "Designing your fate...",
+    "Crafting challenges ahead...",
+    "Preparing surprises...",
+  ];
+
+  // Build display message
+  let displayMsg: string;
+  let displayColor: string;
+  let displayPrefix: string;
+
+  if (state.aiGenerating) {
+    const idx = Math.floor(time * 0.3) % generatingMsgs.length;
+    displayMsg = generatingMsgs[idx];
+    displayColor = "rgba(167, 139, 250, 0.85)";
+    displayPrefix = "DM: ";
+  } else if (state.dmMessages.length > 0) {
+    const latest = state.dmMessages[state.dmMessages.length - 1];
+    displayMsg = latest.text;
+    displayColor = latest.from === "you"
+      ? "rgba(130, 200, 255, 0.9)"   // light blue for player
+      : "rgba(235, 225, 210, 0.9)";  // warm white for DM
+    displayPrefix = latest.from === "you" ? "You: " : "DM: ";
+  } else {
+    displayMsg = "";
+    displayColor = "rgba(235, 225, 210, 0.5)";
+    displayPrefix = "";
+  }
+
+  if (displayMsg) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(PAD, S2_Y, DM_MAX_X - PAD, S2_H);
+    ctx.clip();
+    ctx.textBaseline = "middle";
+
+    // Prefix (bold)
+    ctx.font = "bold 11px monospace";
+    ctx.fillStyle = "#C4A882";
+    const prefixW = ctx.measureText(displayPrefix).width;
+    ctx.fillText(displayPrefix, PAD, S2_CY);
+
+    // Message
+    ctx.font = "11px monospace";
+    ctx.fillStyle = displayColor;
+    ctx.fillText(displayMsg, PAD + prefixW, S2_CY);
+    ctx.restore();
+  }
+
+  // ── Command buttons (right side) ─────────────────────────────────────────
+  const suggestions = (state.suggestions || []).slice(0, CMD_BTN_MAX);
+  if (suggestions.length > 0) {
+    const BTN_H = CMD_BTN_H;
+    const BTN_R = 4;
+    const BTN_SHADOW_OFFSET = 2;
+    const BTN_BASE_COLOR = "#8A7D45";
+    const BTN_SHADOW_COLOR = "#5C5430";
+    const KEY_BG = "#3A3520";       // dark inset for the keycap
+    const KEY_HIGHLIGHT = "#4A4530"; // top edge of keycap (lighter)
+    const KEY_SIZE = 14;
+    const KEY_PAD = 4;              // space between key and label
+    const btnY = S2_Y + (S2_H - BTN_H) / 2;
+
+    // Measure widths: keycap + gap + label + padding
+    ctx.font = "bold 10px monospace";
+    const widths: number[] = suggestions.map(
+      (s) => KEY_SIZE + KEY_PAD + ctx.measureText(s.label).width + 14
+    );
+    const totalBtnW = widths.reduce((a, b) => a + b, 0) + CMD_BTN_GAP * (suggestions.length - 1);
+
+    let bx = CANVAS_WIDTH - PAD - totalBtnW;
+
+    for (let i = 0; i < suggestions.length; i++) {
+      const bw = widths[i];
+
+      // Is this button currently "pressed"? (flash for 0.2s)
+      const isPressed = state.pressedButtonIndex === i &&
+        (time - state.pressedButtonTime) < 0.2;
+
+      if (isPressed) {
+        // Pressed state: no shadow, button shifts down, darker color
+        ctx.fillStyle = "#6B6030";
+        ctx.beginPath();
+        ctx.roundRect(bx, btnY + BTN_SHADOW_OFFSET, bw, BTN_H, BTN_R);
+        ctx.fill();
+      } else {
+        // Normal state: shadow + body
+        ctx.fillStyle = BTN_SHADOW_COLOR;
+        ctx.beginPath();
+        ctx.roundRect(bx, btnY + BTN_SHADOW_OFFSET, bw, BTN_H, BTN_R);
+        ctx.fill();
+
+        ctx.fillStyle = BTN_BASE_COLOR;
+        ctx.beginPath();
+        ctx.roundRect(bx, btnY, bw, BTN_H, BTN_R);
+        ctx.fill();
+      }
+
+      // Offset everything down by shadow amount when pressed
+      const pressOff = isPressed ? BTN_SHADOW_OFFSET : 0;
+
+      // ── Keyboard key indicator (left side of button) ──────────────────
+      const keyX = bx + 4;
+      const keyY = btnY + (BTN_H - KEY_SIZE) / 2 + pressOff;
+      const keyLabel = String(i + 1);
+
+      // Keycap shadow (bottom edge, gives depth)
+      ctx.fillStyle = "#1A1810";
+      ctx.beginPath();
+      ctx.roundRect(keyX, keyY + 1, KEY_SIZE, KEY_SIZE, 2);
+      ctx.fill();
+
+      // Keycap body
+      ctx.fillStyle = KEY_BG;
+      ctx.beginPath();
+      ctx.roundRect(keyX, keyY, KEY_SIZE, KEY_SIZE, 2);
+      ctx.fill();
+
+      // Keycap top highlight (1px lighter strip)
+      ctx.fillStyle = KEY_HIGHLIGHT;
+      ctx.fillRect(keyX + 1, keyY, KEY_SIZE - 2, 2);
+
+      // Keycap border
+      ctx.strokeStyle = "#2A2520";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(keyX + 0.5, keyY + 0.5, KEY_SIZE - 1, KEY_SIZE - 1, 2);
+      ctx.stroke();
+
+      // Key number
+      ctx.font = "bold 9px monospace";
+      ctx.fillStyle = "#D4C88A";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(keyLabel, keyX + KEY_SIZE / 2, keyY + KEY_SIZE / 2 + 1);
+
+      // ── Label text (right of keycap) ──────────────────────────────────
+      ctx.font = "bold 10px monospace";
+      ctx.fillStyle = "#FFFFFF";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(suggestions[i].label, keyX + KEY_SIZE + KEY_PAD, btnY + BTN_H / 2 + pressOff);
+
+      bx += bw + CMD_BTN_GAP;
+    }
+
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+  }
+
+  ctx.restore();
+}

@@ -46,6 +46,23 @@ export interface SpriteAtlas {
   bgSolidSky: HTMLImageElement;
   bgSolidGrass: HTMLImageElement;
   bgSolidDirt: HTMLImageElement;
+  // HUD
+  hudHeart: HTMLImageElement;
+  hudHeartEmpty: HTMLImageElement;
+  hudHeartHalf: HTMLImageElement;
+  hudCoin: HTMLImageElement;
+  hudDigit0: HTMLImageElement;
+  hudDigit1: HTMLImageElement;
+  hudDigit2: HTMLImageElement;
+  hudDigit3: HTMLImageElement;
+  hudDigit4: HTMLImageElement;
+  hudDigit5: HTMLImageElement;
+  hudDigit6: HTMLImageElement;
+  hudDigit7: HTMLImageElement;
+  hudDigit8: HTMLImageElement;
+  hudDigit9: HTMLImageElement;
+  hudMultiply: HTMLImageElement;
+  gemBlue: HTMLImageElement;
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -62,6 +79,7 @@ export async function loadSprites(): Promise<SpriteAtlas> {
   const E = "/sprites/enemies/";
   const T = "/sprites/tiles/";
   const B = "/sprites/backgrounds/";
+  const H = "/sprites/hud/";
 
   const [
     playerIdle,
@@ -102,6 +120,22 @@ export async function loadSprites(): Promise<SpriteAtlas> {
     bgSolidSky,
     bgSolidGrass,
     bgSolidDirt,
+    hudHeart,
+    hudHeartEmpty,
+    hudHeartHalf,
+    hudCoin,
+    hudDigit0,
+    hudDigit1,
+    hudDigit2,
+    hudDigit3,
+    hudDigit4,
+    hudDigit5,
+    hudDigit6,
+    hudDigit7,
+    hudDigit8,
+    hudDigit9,
+    hudMultiply,
+    gemBlue,
   ] = await Promise.all([
     loadImage(`${C}character_green_idle.png`),
     loadImage(`${C}character_green_walk_a.png`),
@@ -141,6 +175,22 @@ export async function loadSprites(): Promise<SpriteAtlas> {
     loadImage(`${B}background_solid_sky.png`),
     loadImage(`${B}background_solid_grass.png`),
     loadImage(`${B}background_solid_dirt.png`),
+    loadImage(`${H}hud_heart.png`),
+    loadImage(`${H}hud_heart_empty.png`),
+    loadImage(`${H}hud_heart_half.png`),
+    loadImage(`${H}hud_coin.png`),
+    loadImage(`${H}hud_character_0.png`),
+    loadImage(`${H}hud_character_1.png`),
+    loadImage(`${H}hud_character_2.png`),
+    loadImage(`${H}hud_character_3.png`),
+    loadImage(`${H}hud_character_4.png`),
+    loadImage(`${H}hud_character_5.png`),
+    loadImage(`${H}hud_character_6.png`),
+    loadImage(`${H}hud_character_7.png`),
+    loadImage(`${H}hud_character_8.png`),
+    loadImage(`${H}hud_character_9.png`),
+    loadImage(`${H}hud_character_multiply.png`),
+    loadImage(`${T}gem_blue.png`),
   ]);
 
   return {
@@ -187,5 +237,21 @@ export async function loadSprites(): Promise<SpriteAtlas> {
     bgSolidSky,
     bgSolidGrass,
     bgSolidDirt,
+    hudHeart,
+    hudHeartEmpty,
+    hudHeartHalf,
+    hudCoin,
+    hudDigit0,
+    hudDigit1,
+    hudDigit2,
+    hudDigit3,
+    hudDigit4,
+    hudDigit5,
+    hudDigit6,
+    hudDigit7,
+    hudDigit8,
+    hudDigit9,
+    hudMultiply,
+    gemBlue,
   };
 }
