@@ -340,6 +340,27 @@ export class GameEngine {
       player.onGround = true;
     }
 
+    // 3b. Crumbling platforms — collapse after player stands on them for ~1s
+    if (player.onGround) {
+      for (const chunk of chunks) {
+        for (const plat of chunk.platforms) {
+          if (plat.type !== "crumbling" || plat.crumbled) continue;
+          const wx = platformWorldX(plat, chunk.chunk_index);
+          const onThis = player.x + PLAYER_WIDTH > wx &&
+                         player.x < wx + plat.width &&
+                         Math.abs((player.y + PLAYER_HEIGHT) - plat.y) < 5;
+          if (onThis) {
+            plat.crumbleTimer = (plat.crumbleTimer ?? 0) + dt;
+            if (plat.crumbleTimer > 0.8) {
+              plat.crumbled = true;
+              // Player falls through
+              player.onGround = false;
+            }
+          }
+        }
+      }
+    }
+
     // 4. Update camera
     updateCamera(this.camera, player.x, dt);
     this.state.cameraX = this.camera.x;
@@ -360,9 +381,11 @@ export class GameEngine {
           for (const plat of chunk.platforms) {
             if (Math.abs(enemy.y - (plat.y - 30)) < 10 &&
                 enemy.x >= plat.x && enemy.x <= plat.x + plat.width) {
-              // Clamp so enemy.x + moveOffset stays within [plat.x+10, plat.x+width-10]
-              minOff = plat.x + 10 - enemy.x;
-              maxOff = plat.x + plat.width - 10 - enemy.x;
+              // Clamp so enemy stays visually within platform bounds
+              // The sprite is ~40px wide and drawn from x-5, so the visual
+              // right edge is at enemy.x + 35. Tighten right bound accordingly.
+              minOff = plat.x + 15 - enemy.x;
+              maxOff = plat.x + plat.width - 35 - enemy.x;
               break;
             }
           }

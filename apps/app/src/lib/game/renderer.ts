@@ -358,14 +358,55 @@ export function drawPlatform(
   camera: Camera,
   sprites?: SpriteAtlas
 ): void {
+  // Don't draw crumbled platforms
+  if (platform.crumbled) return;
+
   const screenX = worldX - camera.x;
 
   if (screenX + platform.width < 0 || screenX > CANVAS_WIDTH) return;
+
+  // Crumbling shake effect when timer is active
+  if (platform.type === "crumbling" && (platform.crumbleTimer ?? 0) > 0) {
+    const shake = (Math.random() - 0.5) * 4;
+    ctx.save();
+    ctx.translate(shake, shake * 0.5);
+    // Also fade out as it crumbles
+    ctx.globalAlpha = Math.max(0.3, 1 - (platform.crumbleTimer ?? 0) / 0.8);
+  }
 
   if (sprites?.loaded) {
     drawPlatformSprites(ctx, platform, screenX, sprites);
   } else {
     drawPlatformProcedural(ctx, platform, screenX);
+  }
+
+  // Restore shake transform
+  if (platform.type === "crumbling" && (platform.crumbleTimer ?? 0) > 0) {
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+}
+
+/** Draw a cloud-tile platform (left cap + tiled middle + right cap) */
+function drawCloudPlatform(
+  ctx: CanvasRenderingContext2D,
+  left: HTMLImageElement,
+  mid: HTMLImageElement,
+  right: HTMLImageElement,
+  x: number, y: number, w: number, h: number,
+): void {
+  const TILE = 64;
+  if (w <= TILE * 1.5) {
+    // Narrow: just stretch the middle tile
+    ctx.drawImage(mid, x, y, w, h);
+  } else {
+    // Caps at natural tile size, middle fills the rest
+    const capW = Math.min(TILE, Math.floor(w * 0.25)); // cap = 25% of width, max 64
+    const midStartX = x + capW;
+    const midEndX = x + w - capW;
+    ctx.drawImage(left, x, y, capW + 1, h);
+    tileImageH(ctx, mid, midStartX, y, midEndX, TILE, h);
+    ctx.drawImage(right, midEndX, y, capW, h);
   }
 }
 
@@ -386,20 +427,10 @@ function drawPlatformSprites(
   switch (type) {
     case "normal":
     case "moving": {
-      // Grass cloud tiles: left + middle (tiled) + right
-      if (w <= TILE) {
-        ctx.drawImage(sprites.grassCloudMiddle, x, iy, w, h);
-      } else {
-        const leftW = Math.min(TILE, Math.floor(w / 3));
-        const rightW = Math.min(TILE, Math.floor(w / 3));
-        const midW = w - leftW - rightW;
-        const midStartX = x + leftW;
+      drawCloudPlatform(ctx,
+        sprites.grassCloudLeft, sprites.grassCloudMiddle, sprites.grassCloudRight,
+        x, iy, w, h);
 
-        // +1 overlap between cap and middle to prevent gap
-        ctx.drawImage(sprites.grassCloudLeft, x, iy, leftW + 1, h);
-        tileImageH(ctx, sprites.grassCloudMiddle, midStartX, iy, midStartX + midW, TILE, h);
-        ctx.drawImage(sprites.grassCloudRight, x + w - rightW, iy, rightW, h);
-      }
 
       // Moving indicator: subtle blue tint overlay
       if (type === "moving") {
@@ -431,20 +462,16 @@ function drawPlatformSprites(
     }
 
     case "icy": {
-      tileImageH(ctx, sprites.dirtTop, x, iy, x + w, TILE, h);
-      ctx.globalAlpha = 0.45;
-      ctx.fillStyle = "#B3E5FC";
-      ctx.fillRect(x, iy, w, h);
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = "#FFFFFF";
-      ctx.globalAlpha = 0.3;
-      ctx.fillRect(x, iy, w, 3);
-      ctx.globalAlpha = 1;
+      drawCloudPlatform(ctx,
+        sprites.snowCloudLeft, sprites.snowCloudMiddle, sprites.snowCloudRight,
+        x, iy, w, h);
       break;
     }
 
     case "crumbling": {
-      tileImageH(ctx, sprites.brickBrown, x, iy, x + w, TILE, h);
+      drawCloudPlatform(ctx,
+        sprites.sandCloudLeft, sprites.sandCloudMiddle, sprites.sandCloudRight,
+        x, iy, w, h);
       break;
     }
 

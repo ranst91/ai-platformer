@@ -170,10 +170,14 @@ export function GameWrapper() {
         gameRef.current?.engine?.pressButton(buttonIndex);
       }
       // DM timeline feedback
-      gameRef.current?.engine?.setDMMessage(label || command, "you");
+      const displayLabel = label || command;
+      gameRef.current?.engine?.setDMMessage(displayLabel, "you");
+
+      // Simple command — let the AI read its own state and decide what to change
       sendToAgent(
-        `Player command: "${label || command}". React — adjust difficulty if needed, ` +
-        `update dm_message, provide new suggestions. Use append_chunks with 2 chunks.`
+        `Player says: "${displayLabel}". ` +
+        `Use get_game_state to check current difficulty and stats, then decide how to adjust. ` +
+        `React with a snarky dm_message. Provide new suggestion buttons. Use append_chunks with 2 chunks.`
       );
     },
     [sendToAgent],

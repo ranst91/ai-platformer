@@ -11,6 +11,7 @@ from typing import Literal
 def populate_chunk(
     chunk: dict,
     difficulty: float,
+    enemies_per_chunk: int = 3,
 ) -> dict:
     """Take a chunk with platforms (from the LLM) and add enemies, coins, mystery blocks."""
 
@@ -41,13 +42,6 @@ def populate_chunk(
             "type": "normal",
         })
 
-    # ── Ensure at least one platform is reachable from ground level ─────
-    # If all platforms are too high (above y=430), pull the lowest one down
-    # so the player can always jump back up after falling.
-    lowest_plat = max(platforms, key=lambda p: p["y"])  # highest y = lowest on screen
-    if lowest_plat["y"] < 440:
-        lowest_plat["y"] = 450
-
     # ── Add mystery blocks above the widest platform(s) ──────────────────
     mystery_blocks = []
     wide_platforms = sorted(platforms, key=lambda p: -p["width"])[:2]
@@ -63,23 +57,28 @@ def populate_chunk(
 
     # ── Place enemies ON platforms ────────────────────────────────────────
     enemies: list[dict] = []
-    enemy_count = max(2, int(2 + difficulty * 3))  # 2 at easy, 5 at hard
+    # Use AI's decision for enemy count, with a minimum of 2
+    enemy_count = max(2, enemies_per_chunk)
 
     # Eligible platforms for enemies (wide enough, non-mystery)
-    enemy_platforms = [p for p in platforms if p["width"] >= 100 and p.get("type") != "mystery"]
+    # Exclude mystery blocks (too small) and bouncy platforms (springs, not walkable)
+    excluded = {"mystery", "bouncy"}
+    enemy_platforms = [p for p in platforms if p["width"] >= 100 and p.get("type") not in excluded]
     if not enemy_platforms:
-        enemy_platforms = [p for p in platforms if p.get("type") != "mystery"][:2]
+        enemy_platforms = [p for p in platforms if p.get("type") not in excluded][:2]
 
     for i in range(enemy_count):
         plat = enemy_platforms[i % len(enemy_platforms)]
 
-        # Pick enemy type based on difficulty
+        # Pick enemy type — more dangerous at higher difficulty
         if difficulty < 0.3:
             etype: Literal["walker", "flyer", "shooter"] = "walker"
-        elif difficulty < 0.6:
+        elif difficulty < 0.5:
             etype = rng.choice(["walker", "walker", "flyer"])
-        else:
+        elif difficulty < 0.7:
             etype = rng.choice(["walker", "flyer", "flyer", "shooter"])
+        else:
+            etype = rng.choice(["flyer", "flyer", "shooter", "shooter"])
 
         if etype == "flyer":
             # Flyers bob in the air above the platform
@@ -98,7 +97,7 @@ def populate_chunk(
 
     # ── Validate enemy positions — remove any that aren't on a real platform ──
     # Exclude mystery blocks — they're too small for walkers
-    real_platforms = [p for p in platforms if p["type"] != "mystery"]
+    real_platforms = [p for p in platforms if p["type"] not in ("mystery", "bouncy")]
     validated_enemies = []
     for enemy in enemies:
         if enemy["type"] == "flyer":
@@ -118,7 +117,8 @@ def populate_chunk(
 
     # ── Place coins directly above platforms ──────────────────────────────
     coins: list[dict] = []
-    coin_count = max(4, int(6 - difficulty * 2))  # More coins at lower difficulty
+    # Dramatic coin scaling: 8 at easy, 3 at hard
+    coin_count = max(3, int(8 - difficulty * 5))
 
     for i in range(coin_count):
         plat = platforms[i % len(platforms)]

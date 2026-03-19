@@ -32,6 +32,7 @@ export function platformWorldX(platform: Platform, chunkIndex: number): number {
 export interface UpdatePlayerResult {
   landed: boolean;
   fellOff: boolean;
+  onPlatformType?: string; // type of platform the player is standing on
 }
 
 export function updatePlayer(
@@ -46,12 +47,30 @@ export function updatePlayer(
   const movingLeft = keys.has("ArrowLeft") || keys.has("a") || keys.has("A");
   const movingRight = keys.has("ArrowRight") || keys.has("d") || keys.has("D");
 
+  // Check if player is currently standing on an icy platform
+  let onIce = false;
+  if (player.onGround) {
+    for (const { platform, chunkIndex } of platforms) {
+      if (platform.type !== "icy" || platform.crumbled) continue;
+      const wx = platformWorldX(platform, chunkIndex);
+      if (player.x + PLAYER_WIDTH > wx && player.x < wx + platform.width &&
+          Math.abs((player.y + PLAYER_HEIGHT) - platform.y) < 5) {
+        onIce = true;
+        break;
+      }
+    }
+  }
+
   if (movingLeft) {
     player.vx = -PLAYER_SPEED;
     player.facing = -1;
   } else if (movingRight) {
     player.vx = PLAYER_SPEED;
     player.facing = 1;
+  } else if (onIce) {
+    // Icy: slide with friction instead of stopping immediately
+    player.vx *= 0.97;
+    if (Math.abs(player.vx) < 5) player.vx = 0;
   } else {
     player.vx = 0;
   }
@@ -82,6 +101,9 @@ export function updatePlayer(
 
   if (player.vy >= 0) {
     for (const { platform, chunkIndex } of platforms) {
+      // Skip crumbled platforms — they've collapsed
+      if (platform.crumbled) continue;
+
       const wx = platformWorldX(platform, chunkIndex);
       const platTop = platform.y;
 
@@ -101,6 +123,11 @@ export function updatePlayer(
           // Bouncy platform — launch the player high!
           player.vy = PLAYER_JUMP_VELOCITY * 1.5;
           player.onGround = false;
+        } else if (platform.type === "icy") {
+          // Icy platform — reduced friction, player slides
+          player.vy = 0;
+          player.onGround = true;
+          // Don't zero out vx — let momentum carry (handled in movement below)
         } else {
           player.vy = 0;
           player.onGround = true;

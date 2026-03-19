@@ -33,6 +33,15 @@ export interface SpriteAtlas {
   blockExclamation: HTMLImageElement;
   blockExclamationActive: HTMLImageElement;
   brickBrown: HTMLImageElement;
+  sandCloudLeft: HTMLImageElement;
+  sandCloudMiddle: HTMLImageElement;
+  sandCloudRight: HTMLImageElement;
+  stoneCloudLeft: HTMLImageElement;
+  stoneCloudMiddle: HTMLImageElement;
+  stoneCloudRight: HTMLImageElement;
+  snowCloudLeft: HTMLImageElement;
+  snowCloudMiddle: HTMLImageElement;
+  snowCloudRight: HTMLImageElement;
   spring: HTMLImageElement;
   springActive: HTMLImageElement;
   bush: HTMLImageElement;
@@ -110,6 +119,15 @@ export async function loadSprites(): Promise<SpriteAtlas> {
     blockExclamation,
     blockExclamationActive,
     brickBrown,
+    sandCloudLeft,
+    sandCloudMiddle,
+    sandCloudRight,
+    stoneCloudLeft,
+    stoneCloudMiddle,
+    stoneCloudRight,
+    snowCloudLeft,
+    snowCloudMiddle,
+    snowCloudRight,
     spring,
     bush,
     grassDecor,
@@ -165,6 +183,15 @@ export async function loadSprites(): Promise<SpriteAtlas> {
     loadImage(`${T}block_exclamation.png`),
     loadImage(`${T}block_exclamation_active.png`),
     loadImage(`${T}brick_brown.png`),
+    loadImage(`${T}terrain_sand_cloud_left.png`),
+    loadImage(`${T}terrain_sand_cloud_middle.png`),
+    loadImage(`${T}terrain_sand_cloud_right.png`),
+    loadImage(`${T}terrain_stone_cloud_left.png`),
+    loadImage(`${T}terrain_stone_cloud_middle.png`),
+    loadImage(`${T}terrain_stone_cloud_right.png`),
+    loadImage(`${T}terrain_snow_cloud_left.png`),
+    loadImage(`${T}terrain_snow_cloud_middle.png`),
+    loadImage(`${T}terrain_snow_cloud_right.png`),
     loadImage(`${T}spring.png`),
     loadImage(`${T}bush.png`),
     loadImage(`${T}grass.png`),
@@ -223,6 +250,15 @@ export async function loadSprites(): Promise<SpriteAtlas> {
     blockExclamation,
     blockExclamationActive,
     brickBrown,
+    sandCloudLeft,
+    sandCloudMiddle,
+    sandCloudRight,
+    stoneCloudLeft,
+    stoneCloudMiddle,
+    stoneCloudRight,
+    snowCloudLeft,
+    snowCloudMiddle,
+    snowCloudRight,
     spring,
     // No separate spring_active sprite available — reuse spring
     springActive: spring,

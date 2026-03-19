@@ -7,10 +7,11 @@ export interface Platform {
   height: number;
   type: "normal" | "moving" | "crumbling" | "bouncy" | "icy" | "mystery";
   // Runtime state (not from agent)
-  crumbleTimer?: number;
+  crumbleTimer?: number;  // crumbling: counts up while player stands on it
+  crumbled?: boolean;     // crumbling: true = platform has collapsed
   moveOffset?: number;
   moveDirection?: number;
-  hit?: boolean; // mystery blocks: true after player hits from below
+  hit?: boolean;          // mystery blocks: true after player hits from below
 }
 
 export interface Enemy {
