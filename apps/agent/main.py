@@ -31,7 +31,7 @@ Always pass both values when calling append_chunks or reset_game.
 
 ## Platform Design Rules
 - Chunk width: 1000 pixels. Platform x: 0 to 1000 within a chunk.
-- Platform y: 300 to 460 (lower y = higher on screen, ground is at 520)
+- Platform y: 480 to 630 (lower y = higher on screen, ground is at 668, player can jump ~130px)
 - Platform width: 80 to 350. Height: 20 to 40.
 - Types: "normal", "moving", "crumbling", "bouncy", "icy"
 - Each chunk needs 3-5 platforms at VARIED heights

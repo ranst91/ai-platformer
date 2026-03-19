@@ -6,7 +6,7 @@ import { GameCanvas, GameCanvasHandle } from "./GameCanvas";
 import { GameEventCallback } from "@/lib/game/engine";
 import { AgentGameState } from "@/lib/game/types";
 import { HUD_STRIP1_H, HUD_STRIP2_H } from "@/lib/game/renderer";
-import { CANVAS_WIDTH } from "@/lib/game/constants";
+import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/game/constants";
 
 // ── Command button layout (mirrors renderer.ts logic) ────────────────────────
 const CMD_BTN_H = 20;
@@ -43,6 +43,20 @@ export function GameWrapper() {
   const { agent } = useAgent();
   const gameRef = useRef<GameCanvasHandle>(null);
   const [gamePhase, setGamePhase] = useState<"menu" | "loading" | "playing" | "dead" | "game_over">("menu");
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    function checkMobile() {
+      const isTouchOnly =
+        window.matchMedia("(pointer: coarse)").matches &&
+        !window.matchMedia("(pointer: fine)").matches;
+      const isNarrow = window.innerWidth < 768;
+      setIsMobile(isTouchOnly || isNarrow);
+    }
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   const agentState = agent.state as AgentGameState | undefined;
 
@@ -221,9 +235,9 @@ export function GameWrapper() {
       if (gamePhase === "menu" || gamePhase === "game_over") {
         const btnW = 180;
         const btnH = 36;
-        const btnX = 400 - btnW / 2; // CANVAS_WIDTH/2
-        // Menu button at cy+40=340, Game Over button at cy+60=360
-        const btnY = gamePhase === "menu" ? 340 : 360;
+        const btnX = CANVAS_WIDTH / 2 - btnW / 2;
+        // Menu button at CANVAS_HEIGHT/2+40, Game Over button at CANVAS_HEIGHT/2+60
+        const btnY = gamePhase === "menu" ? CANVAS_HEIGHT / 2 + 40 : CANVAS_HEIGHT / 2 + 60;
         if (cx >= btnX && cx <= btnX + btnW && cy >= btnY && cy <= btnY + btnH) {
           startGame();
           return;
@@ -246,6 +260,25 @@ export function GameWrapper() {
     },
     [gamePhase, startGame, agentState?.suggestions, agent.isRunning, handleCommand],
   );
+
+  if (isMobile) {
+    return (
+      <div className="relative flex flex-col items-center justify-center min-h-screen bg-gray-950 px-8 text-center">
+        <img
+          src="/assets/kenney/player_idle.png"
+          alt="Player character"
+          className="w-24 h-24 mb-8 [image-rendering:pixelated]"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
+        <h1 className="text-white text-2xl font-bold mb-4 font-mono">Desktop Only</h1>
+        <p className="text-gray-300 text-base font-mono leading-relaxed max-w-sm">
+          This game requires a keyboard to play.
+          <br /><br />
+          Please visit on a desktop or laptop computer.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex flex-col items-center justify-center min-h-screen bg-gray-950">

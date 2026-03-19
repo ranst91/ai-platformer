@@ -1,8 +1,8 @@
 // apps/app/src/lib/game/constants.ts
 
 // Canvas
-export const CANVAS_WIDTH = 800;
-export const CANVAS_HEIGHT = 600;
+export const CANVAS_WIDTH = 1024;
+export const CANVAS_HEIGHT = 768;
 
 // Physics
 export const GRAVITY = 1800;
@@ -14,8 +14,8 @@ export const MAX_FALL_SPEED = 800;
 
 // Level
 export const CHUNK_WIDTH = 1000;
-export const GROUND_Y = 520;
-export const GROUND_HEIGHT = 80;
+export const GROUND_Y = 668;
+export const GROUND_HEIGHT = 100;
 
 // Camera
 export const CAMERA_LEAD = CANVAS_WIDTH * 0.35; // Player positioned at 35% from left

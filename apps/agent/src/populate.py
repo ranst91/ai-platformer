@@ -26,7 +26,7 @@ def populate_chunk(
 
     # ── Validate / clamp platform values ─────────────────────────────────
     for p in platforms:
-        p["y"] = max(300, min(460, p.get("y", 420)))
+        p["y"] = max(480, min(630, p.get("y", 580)))
         p["width"] = max(80, min(350, p.get("width", 150)))
         p["height"] = max(20, min(40, p.get("height", 30)))
         if p.get("type") not in ("normal", "moving", "crumbling", "bouncy", "icy"):
@@ -36,7 +36,7 @@ def populate_chunk(
     if not platforms or max(p["width"] for p in platforms) < 150:
         platforms.append({
             "x": rng.randint(100, 400),
-            "y": 430,
+            "y": 600,
             "width": 250,
             "height": 30,
             "type": "normal",

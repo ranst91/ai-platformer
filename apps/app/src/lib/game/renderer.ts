@@ -84,17 +84,28 @@ function drawBackgroundAllKenney(
   sprites: SpriteAtlas
 ): void {
   const T = 256;
-  const SKY_H = GROUND_Y; // 520px
+  const SKY_H = GROUND_Y; // 668px
 
-  // Sky: stretch the solid sky to fill the ENTIRE sky area.
-  // One drawImage, no tiling, no seams. This is the base color.
-  ctx.drawImage(sprites.bgSolidSky, 0, 0, CANVAS_WIDTH, SKY_H);
+  // Sky + clouds as one seamless unit:
+  // 1. Solid sky tiles fill the top (behind where clouds will go)
+  // 2. Cloud tiles at y=40, bottom at y=296 — transitions from blue to white
+  // 3. White fill from y=296 to hills — matches cloud bottom edge, no seam
 
-  // Clouds: tile horizontally at NATURAL height (256px) at the top.
-  // The bottom of the cloud sprite matches the solid sky color (same pack),
-  // and below it is the stretched solid sky — same color = no seam.
-  // The 40 there is what makes the clouds touch the white BG below it!
-  tileRow(ctx, sprites.bgClouds, camera.x * 0.15, 40, T, T);
+  // Top sky (only above and behind clouds)
+  for (let ty = 0; ty < T + 40; ty += T) {
+    for (let tx = 0; tx < CANVAS_WIDTH; tx += T) {
+      ctx.drawImage(sprites.bgSolidSky, tx, ty, T + 1, T + 1);
+    }
+  }
+
+  // Cloud row
+  const CLOUD_Y = 40;
+  tileRow(ctx, sprites.bgClouds, camera.x * 0.15, CLOUD_Y, T, T);
+
+  // White fill below clouds — matches the white cloud bottom edge
+  const cloudBottom = CLOUD_Y + T; // 296
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, cloudBottom, CANVAS_WIDTH, SKY_H - cloudBottom);
 
   // Hills: tile horizontally at NATURAL height, positioned in the lower sky.
   // Clip above ground to avoid parallax mismatch with ground tiles.
