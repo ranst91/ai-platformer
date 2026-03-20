@@ -3,13 +3,25 @@ AI Infinite Platformer - Game Agent
 
 The AI acts as a Dungeon Master, designing platform layouts in real-time.
 Enemies, coins, and mystery blocks are added automatically by the populate module.
+
+Served via FastAPI + add_langgraph_fastapi_endpoint.
 """
 
-from copilotkit import CopilotKitMiddleware
+import os
+import warnings
+from dotenv import load_dotenv
+from fastapi import FastAPI
+import uvicorn
+
+from copilotkit import CopilotKitMiddleware, LangGraphAGUIAgent
+from ag_ui_langgraph import add_langgraph_fastapi_endpoint
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.memory import MemorySaver
 
 from src.game import GameAgentState, game_tools
+
+_ = load_dotenv()
 
 SYSTEM_PROMPT = """
 You are the Dungeon Master of an infinite side-scrolling platformer game.
@@ -60,12 +72,44 @@ NEVER suggest player actions like "jump", "sprint", "duck", "attack" — you don
 - When player asks for change: get_game_state FIRST, then decide new values
 """
 
+# Build the agent graph (unchanged)
+checkpointer = MemorySaver()
 agent = create_agent(
     model=ChatOpenAI(model="gpt-5-mini", reasoning={"effort": "low", "summary": "concise"}),
     tools=game_tools,
     middleware=[CopilotKitMiddleware()],
     state_schema=GameAgentState,
     system_prompt=SYSTEM_PROMPT,
+    checkpointer=checkpointer,
 )
 
 graph = agent
+
+# Serve via FastAPI
+app = FastAPI()
+
+add_langgraph_fastapi_endpoint(
+    app=app,
+    agent=LangGraphAGUIAgent(
+        name="sample_agent",
+        description="AI Dungeon Master for an infinite platformer game.",
+        graph=graph,
+    ),
+    path="/",
+)
+
+
+def main():
+    """Run the uvicorn server."""
+    port = int(os.getenv("PORT", "8123"))
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=True,
+    )
+
+
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+if __name__ == "__main__":
+    main()

@@ -3,14 +3,12 @@ import {
   ExperimentalEmptyAdapter,
   copilotRuntimeNextJSAppRouterEndpoint,
 } from "@copilotkit/runtime";
-import { LangGraphAgent } from "@copilotkit/runtime/langgraph";
+import { LangGraphHttpAgent } from "@copilotkit/runtime/langgraph";
 import { NextRequest } from "next/server";
 
-// 1. Define the agent connection to LangGraph
-const defaultAgent = new LangGraphAgent({
-  deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8123",
-  graphId: "sample_agent",
-  langsmithApiKey: process.env.LANGSMITH_API_KEY || "",
+// 1. Define the agent connection to the FastAPI LangGraph server
+const defaultAgent = new LangGraphHttpAgent({
+  url: process.env.AGENT_URL || "http://localhost:8123",
 });
 
 // 3. Define the route and CopilotRuntime for the agent
