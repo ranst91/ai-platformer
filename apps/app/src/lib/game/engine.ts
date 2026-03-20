@@ -53,8 +53,8 @@ function starterChunks(): LevelChunk[] {
         { x: 250, y: 500, width: 55, height: 30, type: "mystery" },
       ],
       enemies: [
-        { x: 250, y: 580, type: "walker", alive: true, direction: 1, moveOffset: 0 },
-        { x: 500, y: 540, type: "walker", alive: true, direction: -1, moveOffset: 0 },
+        { x: 480, y: 540, type: "walker", alive: true, direction: 1, moveOffset: 0 },
+        { x: 550, y: 540, type: "walker", alive: true, direction: -1, moveOffset: 0 },
         { x: 800, y: 480, type: "flyer", alive: true, direction: 1, moveOffset: 0 },
       ],
       coins: [

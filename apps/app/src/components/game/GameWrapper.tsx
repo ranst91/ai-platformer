@@ -107,29 +107,19 @@ export function GameWrapper() {
   );
 
   // --- Start game ---
+  // Start playing immediately on the hardcoded starter chunks (0-1).
+  // Ask the AI to APPEND from chunk 2 onward — don't replace what's already there.
   const startGame = useCallback(() => {
-    setGamePhase("loading");
-    gameRef.current?.engine?.setLoading(true);
+    gameRef.current?.engine?.startPlaying();
+    setGamePhase("playing");
     sendToAgent(
-      "Start a new game! Use reset_game with 6 chunks (chunk_index 0-5). " +
-      "Set difficulty to 0.4, lives to 3. Design varied platform layouts — " +
-      "mix heights, add gaps to jump over, make it interesting! " +
+      "Game started! The first 2 chunks (0-1) are already built. " +
+      "Use append_chunks to add 4 more chunks (chunk_index 2, 3, 4, 5). " +
+      "Set difficulty to 0.4, enemies_per_chunk to 3. " +
       "Welcome the player with a snarky dm_message and include suggestion buttons."
     );
   }, [sendToAgent]);
 
-  // When AI chunks arrive during loading, start playing
-  useEffect(() => {
-    if (gamePhase === "loading" && agentState?.level_chunks?.length) {
-      const engine = gameRef.current?.engine;
-      if (engine) {
-        engine.setLoading(false);
-        engine.setDMMessage(agentState?.dm_message || "Let's go!");
-        engine.startPlaying();
-      }
-      setGamePhase("playing");
-    }
-  }, [gamePhase, agentState?.level_chunks]);
 
   // --- Request more chunks ---
   const requestChunks = useCallback(
