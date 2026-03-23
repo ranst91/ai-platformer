@@ -145,7 +145,7 @@ wheels = [
 
 [[package]]
 name = "copilotkit"
-version = "0.1.81"
+version = "0.1.83"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ag-ui-langgraph", extra = ["fastapi"] },
@@ -156,9 +156,9 @@ dependencies = [
     { name = "partialjson" },
     { name = "toml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/92/7f/f3947f9f2db99ec971bffd83e788b43053995980ef27a589c56fe7c17194/copilotkit-0.1.81.tar.gz", hash = "sha256:cf492df2faa6b3fdfdbc9355035bf6226451b88aea7452f6f289914d464da081", size = 38829 }
+sdist = { url = "https://files.pythonhosted.org/packages/55/5e/1085379b7b75d4560951ec37d0f3f7f12db46bb84ba5fcf6d3e7cb309915/copilotkit-0.1.83.tar.gz", hash = "sha256:8946d0169543be5c48df7e5e38e4736557ed51bb1215e31ffc4742115716d82d", size = 39876 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/36/2103942a68a0be93962420d176238351c30308117218ad8f43ffabbb5fcc/copilotkit-0.1.81-py3-none-any.whl", hash = "sha256:e6cf3a9964b07b33ef6f1ef1097739aec5a5bb652774e45ff5f0f07fddceaada", size = 48177 },
+    { url = "https://files.pythonhosted.org/packages/22/a7/486cc3de883efd9966d94f739dbae7530e264470a4e005e4af7c9a53a134/copilotkit-0.1.83-py3-none-any.whl", hash = "sha256:efa838179f997a1aa1c815ffd70abe3d9ea42bd866fdf80aed890a193e954a6c", size = 49277 },
 ]
 
 [[package]]
@@ -829,7 +829,6 @@ name = "sample-agent"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "ag-ui-langgraph" },
     { name = "copilotkit" },
     { name = "fastapi" },
     { name = "langchain" },
@@ -844,8 +843,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ag-ui-langgraph" },
-    { name = "copilotkit", specifier = "==0.1.81" },
+    { name = "copilotkit", specifier = "==0.1.83" },
     { name = "fastapi", specifier = ">=0.115.5,<1.0.0" },
     { name = "langchain", specifier = "==1.2.0" },
     { name = "langchain-openai", specifier = ">=1.1.0" },
